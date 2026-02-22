@@ -50,7 +50,7 @@ const HeartLetter = () => {
       icon: badIcon,
       title: '道歉信',
       subTitle: '洗衣粉，我知错了',
-      tags: ['2026.02.22'],
+      tags: ['2026.02.20'],
       
     }
   ];

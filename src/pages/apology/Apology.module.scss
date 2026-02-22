@@ -1,7 +1,28 @@
 .apology {
-    font-size: 18px;
+    padding: 20px;
     display: flex;
-    justify-content: center;
-    margin-top: 40px;
-    color: #ff38e887;
+    flex-direction: column;
+    color: #666;
+    row-gap: 8px;
+
+    .title {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0 auto;
+    }
+
+    .subTitle {
+        align-self: flex-end;
+        font-size: 14px;
+        color: #999;
+    }
+
+    .content {
+        // row-gap: 0.5em;
+
+        p {
+            text-indent: 2em;
+            line-height: 1.4em;
+        }
+    }
 }
