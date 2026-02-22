@@ -45,7 +45,9 @@ jobs:
           enablement: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build with VitePress
+      - name: Clean dist directory
+        run: rm -rf dist || true
+      - name: Build the Momoya
         run: pnpm build # 或 pnpm docs:build / yarn docs:build / bun run docs:build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
