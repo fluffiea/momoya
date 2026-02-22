@@ -13,18 +13,30 @@ const Letter = (props) => {
     tags = [],
     icon = '', 
     title = '',
+    password = '',
     subTitle = '',
   } = props;
 
   const navigate = useNavigate();
-
   const bgColors = ['#FF8E9E', '#BDD9FF'];
+
+  const handleClick = () => {
+    if (password) {
+      const pwd = window.prompt('请输入四位数密码');
+      if (password !== pwd) {
+        return;
+      }
+    }
+    if (path) {
+      navigate(path)
+    }
+  };
 
   return (
     <div
       className={cx(style.letter, {[style.whiteFont]: !(index % 2)})}
       style={{ backgroundColor: bgColors[index % bgColors.length] }}
-      onClick={() => path && navigate(path)}
+      onClick={handleClick}
     >
       <img src={icon} alt={title} />
       <span className={style.title}>{title}</span>
@@ -51,7 +63,7 @@ const HeartLetter = () => {
       title: '道歉信',
       subTitle: '洗衣粉，我知错了',
       tags: ['2026.02.20'],
-      
+      password: '0822',
     }
   ];
   return (
@@ -66,6 +78,7 @@ const HeartLetter = () => {
             icon={letter.icon}
             tags={letter.tags}
             title={letter.title}
+            password={letter.password}
             subTitle={letter.subTitle}
           />
         ))}
