@@ -1,0 +1,15 @@
+.titleBar {
+  display: flex;
+  align-items: center;
+  column-gap: 6px;
+
+  img {
+    width: 32px;
+  }
+
+  span {
+    color: #666;
+    font-weight: bold;
+    font-size: 20px;
+  }
+}

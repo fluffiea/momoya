@@ -1,0 +1,82 @@
+.confess {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  background-color: #7ac8e4be;
+  padding: 16px;
+
+  .container {
+    background-color: rgba(255, 255, 255, 0.724);
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 10px;
+    color: #7ac8e4be;
+
+    .title {
+      font-size: 24px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tomomo {
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .showloving > p {
+      font-size: 16px;
+      text-indent: 2em;
+    }
+
+    .btns {
+      display: flex;
+      justify-content: right;
+      align-items: center;
+      column-gap: 10px;
+
+      button {
+        height: 30px;
+        border: none;
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        border-radius: 30px;
+      }
+
+      .reject {
+        background-color: rgba(45, 45, 45, 0.064);
+        color: #999;
+
+        &.warn {
+          background-color: #d34040ef;
+          color: rgba(255, 255, 255, 0.724);
+        }
+      }
+
+      .accept {
+        background-color: #7ac8e4be;
+        color: rgba(255, 255, 255, 0.724);
+      }
+    }
+  }
+
+  .footer {
+    color: #ffffff77;
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    margin-top: 16px;
+
+    p {
+      line-height: 1.6em;
+      margin: 0;
+    }
+
+    .toRighht {
+      align-self: flex-end;
+    }
+  }
+}

@@ -1,0 +1,25 @@
+.loveNote {
+  width: 84%;
+  margin: 0 auto;
+
+  .note {
+    padding: 14px;
+    display: inline-block;
+    width: 100%;
+    background-image: linear-gradient(to right, #ffbdd682, #d8fcff45);
+    border-radius: 12px;
+    margin-top: 8px;
+    color: #666;
+    box-sizing: border-box;
+    box-shadow: 0 0 4px 2px rgba(0, 0, 0, 0.03);
+    line-height: 1.5em;
+    display: flex;
+    flex-direction: column;
+
+    .date {
+      font-size: 14px;
+      color: #999;
+      align-self: flex-end;
+    }
+  }
+}

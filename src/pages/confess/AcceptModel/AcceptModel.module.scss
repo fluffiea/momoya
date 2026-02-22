@@ -1,0 +1,28 @@
+.acceptModel {
+  color: rgba(233, 97, 203, 0.591);
+
+  p {
+    margin: 0;
+    line-height: 1.5em;
+  }
+
+  .title {
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .content {
+    font-size: 14px;
+
+    .toRight {
+      display: flex;
+      justify-content: end;
+    }
+
+    img {
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 10px;
+    }
+  }
+}

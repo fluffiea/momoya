@@ -1,0 +1,47 @@
+.bottomTabBar {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  width: 80%;
+  box-shadow: 0 0 1px 2px #00000002;
+  background-color: #fff;
+  height: 70px;
+  border-radius: 35px;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  .bottomTabBarItem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    border: none;
+    font-size: 14px;
+    width: 66px;
+    height: 66px;
+    border-radius: 50%;
+    /* 1. 去掉默认文字装饰（下划线） */
+    text-decoration: none;
+    /* 2. 去掉默认颜色（继承父元素颜色） */
+    color: #666;
+    /* 3. 去掉点击后的高亮背景（移动端） */
+    -webkit-tap-highlight-color: transparent;
+    /* 4. 去掉选中时的高亮 */
+    outline: none;
+    /* 5. 去掉聚焦时的边框 */
+
+    img {
+      width: 28px;
+    }
+  }
+
+  .active {
+    background-color: #f9acc9;
+    transform: translateY(-10px);
+    color: #fff;
+    font-weight: bold;
+  }
+}
