@@ -1,7 +1,7 @@
 import cx from 'classnames';
 import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import HomeRomanceSectionHeading from '@/pages/home/HomeRomanceSectionHeading';
+import HomeRomanceSectionHeading from '@/components/ui/HomeRomanceSectionHeading';
 import letterIcon from './icons/letter.svg';
 import { LETTERS } from './letters';
 
@@ -47,7 +47,7 @@ const Letter = (props) => {
         }
       }}
       className={cx(
-        'heart-letter-card flex min-h-0 cursor-pointer flex-col items-center gap-2 p-3.5 text-center transition duration-200 sm:gap-2.5 sm:p-4',
+        'heart-letter-card flex min-h-0 cursor-pointer flex-col items-center gap-2 p-4 text-center transition duration-200 sm:gap-2.5 sm:p-[18px]',
         'hover:border-love/32 hover:shadow-[0_6px_22px_rgb(249_172_201/0.16)]',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-love/50',
       )}
@@ -61,17 +61,17 @@ const Letter = (props) => {
           className="h-6 w-6 sm:h-7 sm:w-7"
         />
       </span>
-      <h3 className="line-clamp-2 w-full font-display text-sm font-bold leading-snug text-brown-title sm:text-base">
+      <h3 className="line-clamp-2 w-full font-display text-base font-bold leading-snug text-brown-title sm:text-lg">
         {title}
       </h3>
-      <p className="line-clamp-2 w-full text-[11px] leading-snug text-neutral-700 sm:text-xs">
+      <p className="line-clamp-2 w-full text-xs leading-snug text-neutral-700 sm:text-sm">
         {subTitle}
       </p>
       <div className="mt-auto flex w-full flex-wrap items-center justify-center gap-1 pt-0.5">
         {tags.map((tag) => (
           <span
             key={tag}
-            className="inline-block shrink-0 rounded-full bg-love/14 px-2 py-0.5 text-[10px] font-medium text-brown-title/85 sm:text-[11px]"
+            className="inline-block shrink-0 rounded-full bg-love/14 px-2 py-0.5 text-[11px] font-medium text-brown-title/85 sm:text-xs"
           >
             {tag}
           </span>
@@ -91,8 +91,6 @@ const HeartLetter = () => {
         id="heart-letter-heading"
         iconSrc={letterIcon}
         title="心动信件"
-        iconWrapperClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-love/30 sm:h-9 sm:w-9"
-        imgClassName="h-4 w-4 sm:h-[18px] sm:w-[18px]"
       />
 
       <Motion.div

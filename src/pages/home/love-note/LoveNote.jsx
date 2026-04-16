@@ -1,11 +1,21 @@
 import { useMemo } from 'react';
+import cx from 'classnames';
 import { motion as Motion } from 'framer-motion';
-import HomeRomanceSectionHeading from '@/pages/home/HomeRomanceSectionHeading';
+import HomeRomanceSectionHeading from '@/components/ui/HomeRomanceSectionHeading';
 import starIcon from './icons/star.svg';
 import { useDailyHitokoto } from './useDailyHitokoto';
 
 const LoveNote = () => {
-  const { hitokoto, from, fromWho, loading, error, retry } = useDailyHitokoto();
+  const { hitokoto, from, fromWho, loading, error, retry, refresh } = useDailyHitokoto();
+  const canRefresh = !loading && !error && Boolean(hitokoto);
+
+  const handleCardKeyDown = (e) => {
+    if (!canRefresh) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      refresh();
+    }
+  };
 
   const { date, dateIso } = useMemo(() => {
     const now = new Date();
@@ -29,19 +39,25 @@ const LoveNote = () => {
         id="love-note-heading"
         iconSrc={starIcon}
         title="今日寄语"
-        iconWrapperClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/85 sm:h-9 sm:w-9"
-        imgClassName="h-4 w-4 opacity-90 sm:h-[18px] sm:w-[18px]"
       />
 
       <Motion.div
-        className="love-note-card"
+        className={cx('love-note-card', canRefresh && 'cursor-pointer')}
         initial={{ opacity: 0, y: 10 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-40px' }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         aria-busy={loading}
+        role={canRefresh ? 'button' : undefined}
+        tabIndex={canRefresh ? 0 : undefined}
+        aria-disabled={loading || error ? true : undefined}
+        aria-label={canRefresh ? '点击刷新今日寄语' : undefined}
+        onClick={() => {
+          if (canRefresh) refresh();
+        }}
+        onKeyDown={handleCardKeyDown}
       >
-        <div className="relative z-10 px-5 pb-1 pt-5 sm:px-7 sm:pt-5">
+        <div className="relative z-10 px-5 pb-2 pt-5 sm:px-7 sm:pt-5">
           <div
             className="mx-auto mb-3.5 h-0.5 w-11 rounded-full bg-love/22 sm:mb-4 sm:w-12"
             aria-hidden
@@ -75,12 +91,12 @@ const LoveNote = () => {
           )}
 
           {!loading && !error && hitokoto && (
-            <div className="mx-auto max-w-prose space-y-3">
+            <div className="mx-auto flex w-full max-w-prose flex-col items-center gap-2.5 text-center">
               <p className="text-[15px] font-medium leading-[1.72] text-neutral-600 sm:text-base sm:leading-[1.78]">
                 “{hitokoto}”
               </p>
               {sourceLine && (
-                <p className="text-center text-[13px] leading-snug text-neutral-500 sm:text-sm sm:leading-relaxed">
+                <p className="text-[13px] leading-relaxed text-neutral-500 sm:text-sm">
                   <span className="text-neutral-400">—— </span>
                   {sourceLine}
                 </p>
@@ -89,7 +105,7 @@ const LoveNote = () => {
           )}
         </div>
 
-        <footer className="relative z-10 mt-4 flex items-center gap-3 px-5 pb-5 pt-0.5 sm:px-7">
+        <footer className="relative z-10 mt-4 flex items-center gap-3 px-5 pb-5 sm:px-7">
           <span
             className="h-px min-w-[2rem] flex-1 bg-gradient-to-r from-transparent to-love/22"
             aria-hidden

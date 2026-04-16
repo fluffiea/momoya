@@ -87,10 +87,11 @@ export function useDailyHitokoto() {
   const [error, setError] = useState(null);
   const fetchingRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options = {}) => {
+    const { force = false } = options;
     const today = getLocalDateKey();
     const cached = readCache();
-    if (cached && cached.date === today) {
+    if (!force && cached && cached.date === today) {
       setHitokoto(cached.hitokoto);
       setUuid(cached.uuid);
       setFrom(cached.from);
@@ -138,6 +139,10 @@ export function useDailyHitokoto() {
     load();
   }, [load]);
 
+  const refresh = useCallback(() => {
+    load({ force: true });
+  }, [load]);
+
   return {
     hitokoto,
     uuid,
@@ -146,5 +151,6 @@ export function useDailyHitokoto() {
     loading,
     error,
     retry,
+    refresh,
   };
 }

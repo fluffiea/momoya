@@ -62,7 +62,7 @@
   }
 
   .link-us-shell {
-    @apply relative w-full overflow-hidden pb-6 pt-9;
+    @apply relative w-full overflow-hidden pb-5 pt-7;
   }
 
   /* 主舞台：乳白卡片，无厚伪元素椭圆 */
