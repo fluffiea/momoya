@@ -4,7 +4,7 @@ import HeartLetter from './heart-letter/HeartLetter';
 
 const Home = () => {
   return (
-    <div className="home-romance-bg min-h-screen">
+    <div className="home-romance-bg min-h-tab-page">
       <LinkUsSection />
       <LoveNote />
       <HeartLetter />
