@@ -1,133 +1,171 @@
 import { useMemo, useState } from 'react';
 import cx from 'classnames';
-import style from './Confess.module.scss';
-import RejectModel from './RejectModel/RejectModel';
-import AcceptModel from './AcceptModel/AcceptModel';
-import reject1 from './images/reject1.jpg';
-import reject2 from './images/reject2.jpg';
-import reject3 from './images/reject3.jpg';
-import reject4 from './images/reject4.jpg';
+import ConfessRejectModal from './modals/ConfessRejectModal';
+import ConfessAcceptModal from './modals/ConfessAcceptModal';
+import {
+  CONFESS_PARAGRAPHS,
+  REJECT_BUTTON_LABELS,
+  REJECT_MODAL_STEPS,
+} from './confess-constants';
 
-// 内容段落
-const PARAGRAPHS = [
-  '“玲珑骰子安红豆，入骨相思知不知。”',
-  '我想...我是喜欢上你了',
-  '如果将自己比作一本书，只有在遇到有意义的事情的时候，这本书才会翻动的话，那在遇到你很久很久之前，属于我的这本书就已经尘封在角落了',
-  '记不得那天是怎么样的了，或是晴天，或是雨天，也难得勇敢一次，在评论区捞到了你，即使这样，我也从未奢望过我们能有什么未来',
-  '可就在慢慢的交往中，我开始期待早上起来你的消息，开始期待你会和我说些什么，开始期待你会分享生活中的琐事，我知道，我心动了',
-  '总是觉得你只是一个分享欲很强的女生，只是喜欢分享，至于是不是我应该无所谓，我这样误会到，却依旧享受着你对我的分享欲，在灰色笼罩下的生活，像一束光照了下来，我没敢奢望我能一直拥有这束光，但是在它照在我身上的时候，我却将其全部视作是我的',
-  '也很开心，这些都是我的误会',
-  '我的喜欢是小心翼翼的，不是说他脆弱，而是他很真诚，现在，我变得自私了些，我希望，这束光真正属于我，而不是短暂出现在我的生活中',
-  '请和我交往吧！'
-];
-
-// 拒绝按钮的文案
-const REJECT_BTN_TEXTS = [
-  '拒绝',
-  '再想想呢',
-  '再考虑一下',
-  '不接受拒绝',
-  '同意', // 最后一个为默认值
-];
-
-const REJECT_MODELS = [
-  {
-    src: reject1,
-    info: '给你次机会重选'
-  },
-  {
-    src: reject2,
-    info: '还来，重选！'
-  },
-  {
-    src: reject3,
-    info: '你想死不是？'
-  },
-  {
-    src: reject4,
-    info: '求求你了，和我交往吧！'
-  }
-];
+const DATE_BADGE = '2025.12.27';
 
 const Confess = () => {
   const [rejectStep, setRejectStep] = useState(0);
-  const [rejectModelVisible, setRejectModelVisible] = useState(false);
-  const [acceptModelVisible, setAcceptModelVisible] = useState(false);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectModalPayload, setRejectModalPayload] = useState(null);
+  const [acceptModalVisible, setAcceptModalVisible] = useState(false);
+
+  const rejectLen = REJECT_BUTTON_LABELS.length;
+  const isFinalRejectStep = rejectStep === rejectLen - 1;
 
   const rejectText = useMemo(() => {
-    const text = REJECT_BTN_TEXTS[rejectStep];
-    return text || REJECT_BTN_TEXTS[REJECT_BTN_TEXTS.length - 1];
-  }, [rejectStep]);
+    const text = REJECT_BUTTON_LABELS[rejectStep];
+    return text || REJECT_BUTTON_LABELS[rejectLen - 1];
+  }, [rejectStep, rejectLen]);
 
-  // 计算当前应该显示的拒绝弹窗图片
-  const currentRejectModel = useMemo(() => {
-    if (rejectStep > 0 && rejectStep <= REJECT_MODELS.length) {
-      return REJECT_MODELS[rejectStep - 1];
-    }
-    return null;
-  }, [rejectStep]);
-
-
-  // 接受的回调
   const acceptHandler = () => {
-    setAcceptModelVisible(true);
+    setAcceptModalVisible(true);
   };
 
-  // 拒绝的回调
   const rejectHandler = () => {
-    if (rejectStep < REJECT_BTN_TEXTS.length - 1) {
-      const newStep = rejectStep + 1;
-      setRejectStep(newStep);
-      setRejectModelVisible(true);
+    if (rejectStep < rejectLen - 1) {
+      const payload = REJECT_MODAL_STEPS[rejectStep];
+      if (payload) {
+        setRejectModalPayload(payload);
+        setRejectModalVisible(true);
+      }
     } else {
       acceptHandler();
     }
   };
 
+  const handleRejectModalClose = () => {
+    setRejectModalVisible(false);
+    setRejectModalPayload(null);
+    setRejectStep((prev) => prev + 1);
+  };
+
+  const handleThinkAgain = () => {
+    setRejectStep(0);
+    setRejectModalVisible(false);
+    setRejectModalPayload(null);
+  };
+
   return (
-    <div className={style.confess}>
-      {/* 主题部分 */}
-      <div className={style.container}>
-        <div className={style.title}>恋爱申请书</div>
-        <div className={style.content}>
-        <div className={style.tomomo}>致 MOMO:</div>
-          <div className={style.showloving}>
-            {PARAGRAPHS.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
-          </div>
-          <div className={style.btns}>
-            <button
-              className={cx(
-                style.reject,
-                {
-                  [style.warn]: rejectStep === REJECT_BTN_TEXTS.length - 2,
-                  [style.accept]: rejectStep > REJECT_BTN_TEXTS.length - 2,
-                }
-              )}
-              onClick={rejectHandler}
+    <div className="relative box-border min-h-screen w-full overflow-x-hidden bg-confess-sky px-4 pt-6 pb-safe-page">
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,255,255,0.42)_0%,transparent_55%)]"
+        aria-hidden
+      />
+
+      <div className="relative mx-auto max-w-xl">
+        <div className="rounded-3xl border border-white/55 bg-gradient-to-b from-white/88 via-white/78 to-[rgb(122_200_228/0.06)] p-5 shadow-[0_8px_40px_rgb(122_200_228/0.12)] ring-1 ring-confess-sky-strong/10 backdrop-blur-md sm:p-6">
+          <header className="border-b border-confess-sky-strong/[0.09] pb-5 text-center">
+            <h1 className="font-display text-2xl font-bold tracking-wide text-confess-sky-strong sm:text-[1.65rem]">
+              恋爱申请书
+            </h1>
+            <div
+              className="mx-auto mt-3 flex max-w-[min(18rem,100%)] items-center gap-2.5 px-1"
+              aria-hidden
             >
-              {rejectText}
-            </button>
-            <button className={style.accept} onClick={acceptHandler}>同意</button>
+              <span className="h-px min-w-[1.5rem] flex-1 bg-gradient-to-r from-transparent via-confess-sky-strong/25 to-confess-sky-strong/35" />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-confess-sky-strong/12 text-[0.85rem] shadow-inner ring-1 ring-white/70">
+                ✉️
+              </span>
+              <span className="h-px min-w-[1.5rem] flex-1 bg-gradient-to-l from-transparent via-confess-sky-strong/25 to-confess-sky-strong/35" />
+            </div>
+            <p className="mt-3 font-display text-[11px] font-medium tracking-[0.2em] text-confess-sky-strong/42">
+              寄出日期
+            </p>
+            <p className="mt-1 font-display text-sm tabular-nums text-confess-sky-strong/75">{DATE_BADGE}</p>
+          </header>
+
+          <div className="relative mt-6">
+            <div
+              className="confess-letter-paper pointer-events-none absolute inset-0 opacity-[0.55]"
+              aria-hidden
+            />
+            <div className="relative px-1 py-0.5 text-neutral-600/95">
+              <p className="font-display text-[17px] font-semibold text-neutral-700/90">
+                致 MOMO：
+              </p>
+
+              <div className="mt-4 space-y-3.5 text-[15px] leading-[1.78] sm:text-base">
+                {CONFESS_PARAGRAPHS.map((paragraph, index) =>
+                  index === 0 ? (
+                    <p
+                      key={paragraph}
+                      className="text-center font-display text-[15px] italic leading-[1.85] text-neutral-600/88 sm:text-base"
+                    >
+                      {paragraph}
+                    </p>
+                  ) : (
+                    <p key={paragraph} className="indent-8 text-neutral-600/92">
+                      {paragraph}
+                    </p>
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div className="relative mt-8">
+              {isFinalRejectStep ? (
+                <div className="flex flex-col items-stretch gap-3">
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-confess-sky-strong px-6 text-sm font-semibold text-white shadow-md transition hover:brightness-105 active:scale-[0.98]"
+                    onClick={acceptHandler}
+                  >
+                    同意交往
+                  </button>
+                  <button
+                    type="button"
+                    className="text-center text-sm text-neutral-500 underline decoration-neutral-300 underline-offset-4 transition hover:text-confess-sky-strong"
+                    onClick={handleThinkAgain}
+                  >
+                    我再想想
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    className={cx(
+                      'inline-flex min-h-[44px] min-w-[5.5rem] flex-1 items-center justify-center rounded-full px-5 text-sm font-semibold shadow-sm transition active:scale-[0.98] sm:flex-none',
+                      rejectStep === rejectLen - 2 &&
+                        'bg-rose-600 text-white ring-1 ring-rose-300/50 hover:brightness-105',
+                      rejectStep < rejectLen - 2 &&
+                        'border border-confess-sky-strong/45 bg-white/70 text-confess-sky-strong hover:bg-white',
+                    )}
+                    onClick={rejectHandler}
+                  >
+                    {rejectText}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[44px] min-w-[5.5rem] flex-1 items-center justify-center rounded-full bg-confess-sky-strong px-5 text-sm font-semibold text-white shadow-md transition hover:brightness-105 active:scale-[0.98] sm:flex-none"
+                    onClick={acceptHandler}
+                  >
+                    同意
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 底部部分 */}
-      <div className={style.footer}>
-        <p className={style.toRighht}>🎉 2025.12.27</p>
-      </div>
-
-      {/* 拒绝弹窗 */}
-      <RejectModel
-        visible={rejectModelVisible}
-        onClose={() => setRejectModelVisible(false)}
-        src={currentRejectModel?.src}
-        info={currentRejectModel?.info}
+      <ConfessRejectModal
+        visible={rejectModalVisible}
+        onClose={handleRejectModalClose}
+        src={rejectModalPayload?.src}
+        info={rejectModalPayload?.info}
       />
 
-      <AcceptModel
-        visible={acceptModelVisible}
-        onClose={() => setAcceptModelVisible(false)}
+      <ConfessAcceptModal
+        visible={acceptModalVisible}
+        onClose={() => setAcceptModalVisible(false)}
       />
     </div>
   );

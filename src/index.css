@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --color-love: #f9acc9;
+  --color-love-bg: #f9acc928;
+  --color-letter-rose: #ff8e9e;
+  --color-letter-sky: #bdd9ff;
+  --color-confess-sky: rgb(122 200 228 / 0.75);
+  --color-confess-sky-strong: #7ac8e4;
+  --color-brown-title: #65490d;
+  --color-border-sweet: #ffd0e2;
+  --color-chat-blue: rgb(0 179 255);
+  --color-chat-pink: rgb(253 106 243);
+  --color-countdown-hour: #89caff7f;
+  --color-countdown-minute: #ffc8807f;
+  --color-countdown-second: #ff80807f;
+
+  /* LinkUs 对话气泡：低饱和、与主粉同系 */
+  --color-linkus-bubble-a: rgb(237 242 248);
+  --color-linkus-bubble-a-text: rgb(71 85 105);
+  --color-linkus-bubble-b: rgb(252 228 236);
+  --color-linkus-bubble-b-text: rgb(107 78 90);
+
+  --shadow-soft: 0 0 4px 2px rgb(0 0 0 / 0.03);
+  --shadow-tab: 0 8px 32px rgb(249 172 201 / 0.25);
+  --shadow-linkus-card: 0 4px 24px rgb(249 172 201 / 0.18), 0 1px 3px rgb(0 0 0 / 0.04);
+
+  --font-display: "ZCOOL KuaiLe", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  :root {
+    /*
+     * 带底部 Tab 的页面：先留出 Tab 占位（4.25rem），再与正文隔约 1～2 个字宽（1.25em ≈ 中间值）。
+     */
+    --app-bottom-tab-clearance: calc(
+      4.25rem + 1.25em + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-love-bg p-0 antialiased text-neutral-700;
+  }
+}
+
+@layer components {
+  /*
+   * 首页恋区整页底色（LinkUs + 寄语 + 信件共用），避免与 body 的 love-bg 硬切。
+   * 由 Home 最外层 .home-romance-bg 承载；.link-us-shell 只负责区块留白。
+   */
+  .home-romance-bg {
+    background-color: rgb(255 250 252);
+    background-image:
+      linear-gradient(
+        185deg,
+        rgb(255 245 248) 0%,
+        rgb(255 252 254) 38%,
+        rgb(255 248 250) 100%
+      ),
+      radial-gradient(rgb(249 172 201 / 0.22) 1px, transparent 1px);
+    background-size: auto, 24px 24px;
+  }
+
+  .link-us-shell {
+    @apply relative w-full overflow-hidden pb-6 pt-9;
+  }
+
+  /* 主舞台：乳白卡片，无厚伪元素椭圆 */
+  .link-us-stage {
+    @apply rounded-[28px] border border-white/80 bg-white/90 shadow-linkus-card backdrop-blur-sm;
+  }
+
+  /* 倒计时白卡片：仅用阴影层次，不再用 ::before 粉条 */
+  .link-us-countdown-surface {
+    @apply relative mt-5 w-full overflow-hidden rounded-2xl border border-border-sweet/80 bg-gradient-to-b from-white to-rose-50/40 shadow-linkus-card;
+  }
+
+  .link-us-countdown-inner {
+    @apply isolate grid min-h-[188px] grid-rows-[auto_1fr_auto] items-stretch;
+  }
+
+  /* 纪念日对话顶栏：白底细边，无渐变/内阴影，避免发脏 */
+  .link-us-anniversary-header {
+    @apply mx-auto w-full max-w-[95%] rounded-2xl border border-border-sweet/50 bg-white px-4 py-3.5 text-center shadow-sm;
+  }
+
+  /* 今日寄语：单层淡粉边，避免 border+ring+灰阴影叠出「黑边/脏边」 */
+  .love-note-card {
+    @apply relative overflow-hidden rounded-2xl border border-border-sweet/25 bg-white/95 backdrop-blur-[2px];
+    box-shadow: 0 2px 20px rgb(249 172 201 / 0.1);
+  }
+
+  /* 心动信件：略柔圆角 + 淡边 + 单层粉晕，比硬白边更软、仍与底分离 */
+  .heart-letter-card {
+    @apply relative overflow-hidden rounded-2xl border border-border-sweet/35 bg-white/95 backdrop-blur-[1px];
+    box-shadow: 0 3px 18px rgb(249 172 201 / 0.14);
+  }
+
+  /* 底部 Tab：与寄语卡片同量级阴影，避免 shadow-tab 过重 */
+  .bottom-tab-bar {
+    @apply border border-border-sweet/35 bg-white/95 backdrop-blur-[2px];
+    box-shadow: 0 2px 20px rgb(249 172 201 / 0.12), 0 1px 3px rgb(0 0 0 / 0.04);
+  }
+
+  /* 仅带底部 Tab 的页面：预留 Tab + 安全区 */
+  .pb-app-bottom-tab {
+    padding-bottom: var(--app-bottom-tab-clearance);
+  }
+
+  /* 无 Tab 的整页：常规底距 + 安全区（不小于 2rem） */
+  .pb-safe-page {
+    padding-bottom: max(2rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 恋爱申请正文：极淡横线纸感（装饰，与正文行距大致对齐） */
+  .confess-letter-paper {
+    background-image: repeating-linear-gradient(
+      transparent 0,
+      transparent calc(1.7rem - 1px),
+      rgb(122 200 228 / 0.1) calc(1.7rem - 1px),
+      rgb(122 200 228 / 0.1) 1.7rem
+    );
+    border-radius: 0.5rem;
+  }
+}

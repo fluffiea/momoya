@@ -1,0 +1,113 @@
+import { useMemo } from 'react';
+import { motion as Motion } from 'framer-motion';
+import HomeRomanceSectionHeading from '@/pages/home/HomeRomanceSectionHeading';
+import starIcon from './icons/star.svg';
+import { useDailyHitokoto } from './useDailyHitokoto';
+
+const LoveNote = () => {
+  const { hitokoto, from, fromWho, loading, error, retry } = useDailyHitokoto();
+
+  const { date, dateIso } = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    return {
+      date: `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')}`,
+      dateIso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    };
+  }, []);
+
+  const sourceLine = [from, fromWho].filter(Boolean).join(' · ');
+
+  return (
+    <section
+      className="mx-auto w-[92%] max-w-md px-0 pt-5"
+      aria-labelledby="love-note-heading"
+    >
+      <HomeRomanceSectionHeading
+        id="love-note-heading"
+        iconSrc={starIcon}
+        title="今日寄语"
+        iconWrapperClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/85 sm:h-9 sm:w-9"
+        imgClassName="h-4 w-4 opacity-90 sm:h-[18px] sm:w-[18px]"
+      />
+
+      <Motion.div
+        className="love-note-card"
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: '-40px' }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        aria-busy={loading}
+      >
+        <div className="relative z-10 px-5 pb-1 pt-5 sm:px-7 sm:pt-5">
+          <div
+            className="mx-auto mb-3.5 h-0.5 w-11 rounded-full bg-love/22 sm:mb-4 sm:w-12"
+            aria-hidden
+          />
+
+          {loading && (
+            <div className="text-center" aria-live="polite">
+              <p className="text-[15px] leading-[1.72] text-neutral-400 sm:text-base">
+                正在加载今日寄语…
+              </p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div
+              className="flex flex-col items-center gap-3 text-center"
+              role="alert"
+              aria-live="polite"
+            >
+              <p className="max-w-prose text-[15px] font-medium leading-relaxed text-neutral-600">
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={retry}
+                className="rounded-xl border border-love/25 bg-love/15 px-5 py-2.5 font-display text-sm font-bold text-brown-title/90 transition hover:border-love/35 hover:bg-love/22"
+              >
+                重试
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && hitokoto && (
+            <div className="mx-auto max-w-prose space-y-3">
+              <p className="text-[15px] font-medium leading-[1.72] text-neutral-600 sm:text-base sm:leading-[1.78]">
+                “{hitokoto}”
+              </p>
+              {sourceLine && (
+                <p className="text-center text-[13px] leading-snug text-neutral-500 sm:text-sm sm:leading-relaxed">
+                  <span className="text-neutral-400">—— </span>
+                  {sourceLine}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <footer className="relative z-10 mt-4 flex items-center gap-3 px-5 pb-5 pt-0.5 sm:px-7">
+          <span
+            className="h-px min-w-[2rem] flex-1 bg-gradient-to-r from-transparent to-love/22"
+            aria-hidden
+          />
+          <time
+            dateTime={dateIso}
+            className="shrink-0 font-display text-xs font-medium tracking-[0.12em] text-brown-title/50 tabular-nums sm:text-sm"
+          >
+            {date}
+          </time>
+          <span
+            className="h-px min-w-[2rem] flex-1 bg-gradient-to-l from-transparent to-love/22"
+            aria-hidden
+          />
+        </footer>
+      </Motion.div>
+    </section>
+  );
+};
+
+export default LoveNote;

@@ -1,12 +1,11 @@
-import style from './Home.module.scss';
-import LinkUs from './LinkUs/LinkUs';
-import LoveNote from './LoveNote/LoveNote';
-import HeartLetter from './HeartLetter/HeartLetter';
+import LinkUsSection from './link-us/LinkUsSection';
+import LoveNote from './love-note/LoveNote';
+import HeartLetter from './heart-letter/HeartLetter';
 
 const Home = () => {
   return (
-    <div className={style.home}>
-      <LinkUs />
+    <div className="home-romance-bg min-h-screen">
+      <LinkUsSection />
       <LoveNote />
       <HeartLetter />
     </div>
