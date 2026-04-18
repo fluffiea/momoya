@@ -11,6 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+
+# 本地上传头像（保留目录结构）
+apps/api/uploads/avatars/*
+!apps/api/uploads/avatars/.gitkeep
 
 # Editor directories and files
 .vscode/*

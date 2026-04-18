@@ -49,14 +49,14 @@ jobs:
         run: pnpm run lint
       - name: Typecheck
         run: pnpm run typecheck
-      - name: Clean dist directory
-        run: rm -rf dist || true
+      - name: Clean web dist
+        run: rm -rf apps/web/dist || true
       - name: Build the Momoya
-        run: pnpm build # 或 pnpm docs:build / yarn docs:build / bun run docs:build
+        run: pnpm build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: apps/web/dist
 
   # 部署工作
   deploy:
