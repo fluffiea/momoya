@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '@/components/ui/Modal';
 import { APOLOGY_PASSWORD } from './apologyAuth';
 import { APOLOGY_MODAL_BACKDROP, APOLOGY_MODAL_PANEL } from './apologyModalStyles';
 
-export default function ApologyPasswordGate({ onSuccess }) {
+type ApologyPasswordGateProps = {
+  onSuccess: () => void;
+};
+
+export default function ApologyPasswordGate({ onSuccess }: ApologyPasswordGateProps) {
   const navigate = useNavigate();
   const titleId = useId();
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
 
@@ -16,7 +20,7 @@ export default function ApologyPasswordGate({ onSuccess }) {
   }, []);
 
   const handleSubmit = useCallback(
-    (e) => {
+    (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const trimmed = value.trim();
       if (trimmed !== APOLOGY_PASSWORD) {

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type KeyboardEvent } from 'react';
 import cx from 'classnames';
 import { motion as Motion } from 'framer-motion';
 import HomeRomanceSectionHeading from '@/components/ui/HomeRomanceSectionHeading';
@@ -9,7 +9,7 @@ const LoveNote = () => {
   const { hitokoto, from, fromWho, loading, error, retry, refresh } = useDailyHitokoto();
   const canRefresh = !loading && !error && Boolean(hitokoto);
 
-  const handleCardKeyDown = (e) => {
+  const handleCardKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!canRefresh) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();

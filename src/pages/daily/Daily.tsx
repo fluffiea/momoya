@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { dailyEntriesMock, sortDailyEntriesDesc } from './dailyFeed';
 
-function formatEntryWhen(iso) {
+function formatEntryWhen(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const datePart = d.toLocaleDateString('zh-CN', {

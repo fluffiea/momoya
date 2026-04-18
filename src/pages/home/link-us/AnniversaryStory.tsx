@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import ChatBubble from './ChatBubble';
 
-const MEMORY_MESSAGES = [
+const MEMORY_MESSAGES: { align: 'left' | 'right'; text: string }[] = [
   { align: 'left', text: '“提问，表白可以醒酒吗？”' },
   { align: 'right', text: '“表白不可以，你可以！”' },
   { align: 'left', text: '“差点忘记玩阴阳师的初衷了, cpdd”' },

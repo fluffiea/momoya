@@ -23,7 +23,7 @@ const links = [
   },
 ];
 
-function tabClassName(isActive) {
+function tabClassName(isActive: boolean) {
   return cx(
     'relative z-10 flex min-h-[44px] flex-1 items-center justify-center gap-1.5 overflow-hidden rounded-xl px-2 py-2 no-underline outline-none transition-colors duration-200 [-webkit-tap-highlight-color:transparent]',
     'font-display text-xs font-medium sm:text-sm',
@@ -38,15 +38,15 @@ const BottomTabBar = () => {
   const location = useLocation();
   const pathname = location.pathname;
   const reduceMotion = useReducedMotion();
-  const containerRef = useRef(null);
-  const tabRefs = useRef([null, null]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const tabRefs = useRef<(HTMLAnchorElement | null)[]>([null, null]);
   const [pill, setPill] = useState({ left: 0, top: 0, width: 0, height: 0 });
 
   const activeIndex = pathname === '/daily' ? 1 : 0;
 
   const pillTransition = reduceMotion
-    ? { duration: 0.15, ease: 'easeOut' }
-    : { type: 'spring', stiffness: 420, damping: 32 };
+    ? { duration: 0.15, ease: 'easeOut' as const }
+    : { type: 'spring' as const, stiffness: 420, damping: 32 };
 
   const updatePill = useCallback(() => {
     const container = containerRef.current;
@@ -111,7 +111,7 @@ const BottomTabBar = () => {
       {links.map((link, index) => (
         <NavLink
           key={link.path}
-          ref={(node) => {
+          ref={(node: HTMLAnchorElement | null) => {
             tabRefs.current[index] = node;
           }}
           to={link.path}

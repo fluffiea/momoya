@@ -2,16 +2,16 @@ import { useState, useRef } from 'react';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import yayaAvatar from './assets/yaya.jpg';
 import momoAvatar from './assets/momo.jpg';
-import PartnersStrip from './PartnersStrip';
+import PartnersStrip, { type PartnersTriple } from './PartnersStrip';
 import CountdownPanel from './CountdownPanel';
 import AnniversaryStory from './AnniversaryStory';
 import { useAnniversaryClock } from './hooks/useAnniversaryClock';
 
 export default function LinkUsSection() {
-  const timers = useRef({});
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const anniversary = useAnniversaryClock();
   const [showAnniversary, setShowAnniversary] = useState(false);
-  const [partners, setPartners] = useState([
+  const [partners, setPartners] = useState<PartnersTriple>([
     {
       name: '江江',
       avatar: yayaAvatar,
@@ -27,18 +27,19 @@ export default function LinkUsSection() {
     },
   ]);
 
-  const switchAvatarShow = (index) => {
-    setPartners((prev) =>
-      prev.map((p, i) => {
-        if (index === i) {
-          return { ...p, showAvatar: !p.showAvatar };
-        }
-        return p;
-      }),
-    );
+  const switchAvatarShow = (index: number) => {
+    setPartners((prev) => {
+      if (index !== 0 && index !== 2) return prev;
+      const p = prev[index];
+      if (!('avatar' in p)) return prev;
+      const updated: (typeof prev)[0] = { ...p, showAvatar: !p.showAvatar };
+      return index === 0
+        ? ([updated, prev[1], prev[2]] as const satisfies PartnersTriple)
+        : ([prev[0], prev[1], updated] as const satisfies PartnersTriple);
+    });
   };
 
-  const handleAvatarClick = (index) => {
+  const handleAvatarClick = (index: number) => {
     switchAvatarShow(index);
     clearTimeout(timers.current[index]);
     timers.current[index] = setTimeout(() => {
@@ -59,7 +60,7 @@ export default function LinkUsSection() {
           className="link-us-stage px-4 py-5 sm:px-6"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
         >
           <p className="mb-3 text-center font-display text-sm font-bold text-brown-title/90 sm:text-base">
             点滴时光，连成我们的故事
@@ -82,7 +83,7 @@ export default function LinkUsSection() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }}
                   className="flex w-full flex-col"
                 >
                   <AnniversaryStory />
@@ -95,7 +96,7 @@ export default function LinkUsSection() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }}
                   className="flex w-full flex-col items-stretch"
                 >
                   <CountdownPanel anniversary={anniversary} />

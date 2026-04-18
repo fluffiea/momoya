@@ -24,7 +24,12 @@ export const REJECT_BUTTON_LABELS = [
   '同意',
 ];
 
-export const REJECT_MODAL_STEPS = [
+export type RejectModalStep = {
+  src: string;
+  info: string;
+};
+
+export const REJECT_MODAL_STEPS: RejectModalStep[] = [
   { src: reject1, info: '给你次机会重选' },
   { src: reject2, info: '还来，重选！' },
   { src: reject3, info: '你想死不是？' },

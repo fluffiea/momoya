@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ANNIVERSARY } from '../constants';
 
-const initial = {
+export type AnniversaryClock = {
+  days: string | number;
+  hours: string | number;
+  minutes: string | number;
+  seconds: string | number;
+};
+
+const initial: AnniversaryClock = {
   days: '...',
   hours: '...',
   minutes: '...',
@@ -9,7 +16,7 @@ const initial = {
 };
 
 export function useAnniversaryClock() {
-  const [anniversary, setAnniversary] = useState(initial);
+  const [anniversary, setAnniversary] = useState<AnniversaryClock>(initial);
 
   const tick = useCallback(() => {
     const now = new Date();

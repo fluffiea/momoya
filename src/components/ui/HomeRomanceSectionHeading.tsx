@@ -8,9 +8,17 @@ const GAP_PX = 10;
 const TEXT_PL_START = PAD_PX + ICON_PX + GAP_PX;
 const TEXT_PL_END = PAD_PX;
 
-const easeOut = [0.22, 1, 0.36, 1];
+const easeOut = [0.22, 1, 0.36, 1] as const;
 
-function toChars(text) {
+type HomeRomanceSectionHeadingProps = {
+  id?: string;
+  iconSrc: string;
+  iconAlt?: string;
+  title: string;
+  className?: string;
+};
+
+function toChars(text: string) {
   if (!text) return [];
   return [...text];
 }
@@ -19,13 +27,13 @@ function toChars(text) {
  * 恋区区块标题：整块胶囊可点；初始宽度由内容撑起，锁定后动画过程不增宽。
  * 点击后图标移向右侧，标题逐字左移；再点还原。
  */
-const HomeRomanceSectionHeading = (props) => {
+const HomeRomanceSectionHeading = (props: HomeRomanceSectionHeadingProps) => {
   const { id, iconSrc, iconAlt = '', title, className } = props;
   const [iconAtEnd, setIconAtEnd] = useState(false);
-  const containerRef = useRef(null);
+  const containerRef = useRef<HTMLButtonElement | null>(null);
   const [cw, setCw] = useState(0);
   /** 由首帧（及 title 变化）内容测量得到的固定宽度，避免动效时盒子变宽 */
-  const [lockedWidth, setLockedWidth] = useState(null);
+  const [lockedWidth, setLockedWidth] = useState<number | null>(null);
 
   const measure = useCallback(() => {
     const el = containerRef.current;

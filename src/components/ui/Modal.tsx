@@ -1,7 +1,19 @@
+import type { ReactNode, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import cx from 'classnames';
 
-const Modal = (props) => {
+type ModalProps = {
+  visible?: boolean;
+  onClose?: () => void;
+  children?: ReactNode;
+  width?: string;
+  closeOnBackdropClick?: boolean;
+  ariaLabelledBy?: string;
+  contentClassName?: string;
+  backdropClassName?: string;
+};
+
+const Modal = (props: ModalProps) => {
   const {
     visible = false,
     onClose = () => {},
@@ -13,7 +25,7 @@ const Modal = (props) => {
     backdropClassName = 'bg-white/60 backdrop-blur-sm',
   } = props;
 
-  const closeHandler = (e) => {
+  const closeHandler = (e: MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (closeOnBackdropClick) {
       onClose();

@@ -5,8 +5,7 @@ import {
   HITOKOTO_STORAGE_KEY,
 } from './constants';
 
-/** @returns {string} 本地日历 YYYY-MM-DD */
-export function getLocalDateKey() {
+export function getLocalDateKey(): string {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -14,21 +13,43 @@ export function getLocalDateKey() {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * @returns {{ date: string, hitokoto: string, uuid?: string, from?: string } | null}
- */
-function readCache() {
+type HitokotoCache = {
+  date: string;
+  hitokoto: string;
+  uuid?: string;
+  from?: string;
+  from_who?: string;
+};
+
+function readCache(): HitokotoCache | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(HITOKOTO_STORAGE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
+    const data: unknown = JSON.parse(raw);
     if (
-      typeof data?.date === 'string' &&
-      typeof data?.hitokoto === 'string' &&
-      data.hitokoto.length > 0
+      typeof data === 'object' &&
+      data !== null &&
+      'date' in data &&
+      'hitokoto' in data
     ) {
-      return data;
+      const o = data as Record<string, unknown>;
+      if (
+        typeof o.date === 'string' &&
+        typeof o.hitokoto === 'string' &&
+        o.hitokoto.length > 0
+      ) {
+        return {
+          date: o.date,
+          hitokoto: o.hitokoto,
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+          from: typeof o.from === 'string' ? o.from : undefined,
+          from_who:
+            o.from_who != null && String(o.from_who).trim()
+              ? String(o.from_who).trim()
+              : undefined,
+        };
+      }
     }
     return null;
   } catch {
@@ -36,7 +57,7 @@ function readCache() {
   }
 }
 
-function writeCache(payload) {
+function writeCache(payload: HitokotoCache): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(HITOKOTO_STORAGE_KEY, JSON.stringify(payload));
@@ -45,7 +66,7 @@ function writeCache(payload) {
   }
 }
 
-export function buildHitokotoUrl() {
+export function buildHitokotoUrl(): string {
   const u = new URL(HITOKOTO_API);
   u.searchParams.set('encode', 'json');
   for (const c of HITOKOTO_CATEGORIES) {
@@ -59,35 +80,43 @@ export async function fetchHitokotoSentence() {
   if (!res.ok) {
     throw new Error(`一言请求失败 (${res.status})`);
   }
-  const data = await res.json();
-  const text = data?.hitokoto;
+  const data: unknown = await res.json();
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('一言返回数据无效');
+  }
+  const o = data as Record<string, unknown>;
+  const text = o.hitokoto;
   if (typeof text !== 'string' || !text.trim()) {
     throw new Error('一言返回数据无效');
   }
   return {
     hitokoto: text.trim(),
-    uuid: typeof data.uuid === 'string' ? data.uuid : undefined,
-    from: typeof data.from === 'string' && data.from ? data.from : undefined,
+    uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+    from: typeof o.from === 'string' && o.from ? o.from : undefined,
     from_who:
-      data.from_who != null && String(data.from_who).trim()
-        ? String(data.from_who).trim()
+      o.from_who != null && String(o.from_who).trim()
+        ? String(o.from_who).trim()
         : undefined,
   };
 }
+
+type LoadOptions = {
+  force?: boolean;
+};
 
 /**
  * 同一天仅使用一次成功结果（localStorage）；失败不写入，可重试。
  */
 export function useDailyHitokoto() {
   const [hitokoto, setHitokoto] = useState('');
-  const [uuid, setUuid] = useState(undefined);
-  const [from, setFrom] = useState(undefined);
-  const [fromWho, setFromWho] = useState(undefined);
+  const [uuid, setUuid] = useState<string | undefined>(undefined);
+  const [from, setFrom] = useState<string | undefined>(undefined);
+  const [fromWho, setFromWho] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const fetchingRef = useRef(false);
 
-  const load = useCallback(async (options = {}) => {
+  const load = useCallback(async (options: LoadOptions = {}) => {
     const { force = false } = options;
     const today = getLocalDateKey();
     const cached = readCache();
@@ -107,7 +136,7 @@ export function useDailyHitokoto() {
     setError(null);
     try {
       const result = await fetchHitokotoSentence();
-      const payload = {
+      const payload: HitokotoCache = {
         date: today,
         hitokoto: result.hitokoto,
         uuid: result.uuid,

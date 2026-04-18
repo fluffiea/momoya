@@ -1,12 +1,23 @@
+import type { ReactNode } from 'react';
 import { motion as Motion } from 'framer-motion';
 
-export default function ChatBubble({ align, children, index = 0 }) {
+type ChatBubbleProps = {
+  align: 'left' | 'right';
+  children: ReactNode;
+  index?: number;
+};
+
+export default function ChatBubble({ align, children, index = 0 }: ChatBubbleProps) {
   const isLeft = align === 'left';
   return (
     <Motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.07, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        delay: index * 0.07,
+        duration: 0.35,
+        ease: [0.22, 1, 0.36, 1] as const,
+      }}
       className={
         isLeft
           ? 'max-w-[88%] self-start rounded-2xl rounded-tl-md border border-slate-200/60 bg-linkus-bubble-a px-3.5 py-2.5 text-[15px] leading-relaxed text-linkus-bubble-a-text shadow-sm'

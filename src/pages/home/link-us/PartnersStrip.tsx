@@ -1,12 +1,34 @@
+import type { KeyboardEvent } from 'react';
 import { useId } from 'react';
 import cx from 'classnames';
 import { AnimatePresence, motion as Motion, useReducedMotion } from 'framer-motion';
 
 const AVATAR_SIZE = 'h-[68px] w-[68px] sm:h-[72px] sm:w-[72px]';
 
-const flipSpring = { type: 'spring', stiffness: 320, damping: 28, mass: 0.72 };
+const flipSpring = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.72 };
 
-function PartnerAvatar({ partner, partnerIndex, onAvatarClick }) {
+export type PartnerWithAvatar = { name: string; avatar: string; showAvatar: boolean };
+
+export type PartnerHeart = { name: string };
+
+export type PartnerSlot = PartnerWithAvatar | PartnerHeart;
+
+/** 左头像位 — 中间心形 — 右头像位，顺序固定 */
+export type PartnersTriple = readonly [
+  PartnerWithAvatar,
+  PartnerHeart,
+  PartnerWithAvatar,
+];
+
+function PartnerAvatar({
+  partner,
+  partnerIndex,
+  onAvatarClick,
+}: {
+  partner: PartnerWithAvatar;
+  partnerIndex: number;
+  onAvatarClick: (index: number) => void;
+}) {
   const reducedMotion = useReducedMotion();
 
   const shellClass = cx(
@@ -16,7 +38,7 @@ function PartnerAvatar({ partner, partnerIndex, onAvatarClick }) {
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-love/50',
   );
 
-  const handleKey = (e) => {
+  const handleKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onAvatarClick(partnerIndex);
@@ -117,7 +139,15 @@ function PartnerAvatar({ partner, partnerIndex, onAvatarClick }) {
   );
 }
 
-function HeartToggleButton({ pressed, onToggle, onKeyDown }) {
+function HeartToggleButton({
+  pressed,
+  onToggle,
+  onKeyDown,
+}: {
+  pressed: boolean;
+  onToggle: () => void;
+  onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
+}) {
   const rawId = useId().replace(/:/g, '');
   const gradId = `${rawId}-grad`;
   const gradPressedId = `${rawId}-grad-pressed`;
@@ -170,11 +200,16 @@ export default function PartnersStrip({
   onAvatarClick,
   onHeartToggle,
   heartPressed,
+}: {
+  partners: PartnersTriple;
+  onAvatarClick: (index: number) => void;
+  onHeartToggle: () => void;
+  heartPressed: boolean;
 }) {
   const left = partners[0];
   const right = partners[2];
 
-  const handleKey = (e) => {
+  const handleKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onHeartToggle();

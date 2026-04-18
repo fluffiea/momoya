@@ -7,21 +7,19 @@ import { ANNIVERSARY } from '@/pages/home/link-us/constants';
  * 预期 API 示例：GET /api/daily/entries → DailyEntry[]
  */
 
-/**
- * @typedef {{ id: string, label: string }} DailyTag
- */
+export interface DailyTag {
+  id: string;
+  label: string;
+}
 
-/**
- * @typedef {{
- *   id: string,
- *   at: string,
- *   body: string,
- *   tags: DailyTag[],
- * }} DailyEntry
- */
+export interface DailyEntry {
+  id: string;
+  at: string;
+  body: string;
+  tags: DailyTag[];
+}
 
-/** @type {DailyEntry[]} */
-export const dailyEntriesMock = [
+export const dailyEntriesMock: DailyEntry[] = [
   {
     id: 'together',
     at: ANNIVERSARY.toISOString(),
@@ -35,6 +33,6 @@ export const dailyEntriesMock = [
 ];
 
 /** 新在前 */
-export function sortDailyEntriesDesc(entries) {
-  return [...entries].sort((a, b) => new Date(b.at) - new Date(a.at));
+export function sortDailyEntriesDesc(entries: DailyEntry[]): DailyEntry[] {
+  return [...entries].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }

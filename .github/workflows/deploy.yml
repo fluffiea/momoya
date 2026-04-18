@@ -45,6 +45,10 @@ jobs:
           enablement: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm run lint
+      - name: Typecheck
+        run: pnpm run typecheck
       - name: Clean dist directory
         run: rm -rf dist || true
       - name: Build the Momoya

@@ -1,7 +1,8 @@
 import { Fragment } from 'react';
 import cherryIcon from './assets/cherry.svg';
+import type { AnniversaryClock } from './hooks/useAnniversaryClock';
 
-export default function CountdownPanel({ anniversary }) {
+export default function CountdownPanel({ anniversary }: { anniversary: AnniversaryClock }) {
   return (
     <Fragment>
       <div className="flex flex-col items-center gap-1.5 pt-1">

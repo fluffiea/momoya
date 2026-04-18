@@ -26,7 +26,7 @@ const Apology = () => {
 
   const cardTransition = reduceMotion
     ? { duration: 0.2 }
-    : { duration: 0.45, ease: [0.22, 1, 0.36, 1] };
+    : { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const };
 
   if (!unlocked) {
     return <ApologyPasswordGate onSuccess={handleUnlock} />;

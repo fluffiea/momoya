@@ -6,6 +6,7 @@ import {
   CONFESS_PARAGRAPHS,
   REJECT_BUTTON_LABELS,
   REJECT_MODAL_STEPS,
+  type RejectModalStep,
 } from './confess-constants';
 
 const DATE_BADGE = '2025.12.27';
@@ -13,7 +14,7 @@ const DATE_BADGE = '2025.12.27';
 const Confess = () => {
   const [rejectStep, setRejectStep] = useState(0);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
-  const [rejectModalPayload, setRejectModalPayload] = useState(null);
+  const [rejectModalPayload, setRejectModalPayload] = useState<RejectModalStep | null>(null);
   const [acceptModalVisible, setAcceptModalVisible] = useState(false);
 
   const rejectLen = REJECT_BUTTON_LABELS.length;

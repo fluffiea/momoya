@@ -15,10 +15,22 @@ const listVariants = {
 
 const cardVariants = {
   hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+  },
 };
 
-const Letter = (props) => {
+type LetterProps = {
+  path?: string;
+  tags?: string[];
+  icon?: string;
+  title?: string;
+  subTitle?: string;
+};
+
+const Letter = (props: LetterProps) => {
   const {
     path = '',
     tags = [],
