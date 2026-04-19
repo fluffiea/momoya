@@ -4,124 +4,56 @@ pnpm monorepo：**`apps/web`**（Vite + React + React Router）、**`apps/api`**
 
 文档覆盖：**Docker 部署（推荐）**、**裸金属部署**、**本地开发**、**构建产物**、**环境变量**、**Pages 与跨域注意点**。
 
+> 🚀 **想直接上线？** 完整部署手册在 **[DEPLOYMENT.md](./DEPLOYMENT.md)**——从空服务器到上线、备份、灾备、故障排查，按顺序复制粘贴即可。
+
 ---
 
-## Docker 部署（推荐，3 条命令上线）
+## Docker 部署（推荐）
 
-服务器只要装了 **Docker** 与 **Docker Compose v2**（`docker compose ...`）即可，无需 Node、pnpm、MongoDB、nginx 等任何额外软件。
+完整的"从零到上线"操作手册见 **[DEPLOYMENT.md](./DEPLOYMENT.md)**——包含服务器初始化、HTTPS、备份、灾备、故障排查全流程，按顺序复制粘贴即可。
 
-### 拓扑
-
-```
-浏览器  ──► nginx (web 容器, 暴露 ${WEB_PORT:-8080}) ──┬─► /        SPA 静态文件
-                                                       └─► /api/*   反代 → api 容器:4000
-                                                                              │
-                                                                              ▼
-                                                                        mongo 容器:27017
-```
-
-- **mongo / api 不映射宿主端口**，仅 compose 内网可达，攻击面最小
-- **uploads** 与 **mongo data** 各挂一个 named volume 持久化
-- 前端走相对路径 `/api`，**同源 cookie 自动生效，无需 CORS**
-
-### 仓库里已经准备好的文件
-
-| 文件 | 作用 |
-|------|------|
-| `Dockerfile.api` | API 多阶段构建：pnpm deploy 抽出最小依赖 + sharp 预编译 |
-| `Dockerfile.web` | Web Vite 构建 → nginx:alpine 托管 |
-| `deploy/nginx.conf` | SPA fallback + `/api` 反代 + SSE 不缓冲 |
-| `docker-compose.prod.yml` | 生产编排：mongo + api + web |
-| `.env.production.example` | 密钥模板 |
-| `.dockerignore` | 减小构建上下文 |
-
-### 一次性准备（在你的服务器上）
+简版 3 步速览：
 
 ```bash
-# 1) 拉代码
-git clone <你的仓库地址> momoya && cd momoya
+# 1) 在服务器上拉代码
+git clone <仓库地址> /opt/momoya && cd /opt/momoya
 
-# 2) 生成 .env.production（两个密钥独立，且足够长）
+# 2) 生成密钥
 cat > .env.production <<EOF
 SESSION_SECRET=$(openssl rand -hex 32)
 PROFILE_SECRET_KEY=$(openssl rand -hex 32)
 WEB_PORT=8080
 EOF
-```
+chmod 600 .env.production
 
-> ⚠️ **`PROFILE_SECRET_KEY` 一旦上线，永远不要换**——它是数据库里加密昵称、简介的密钥，换了等于把这两个字段全部"自毁"。
->
-> ⚠️ 生成密钥的命令请务必在服务器本机跑，不要把密钥贴到任何聊天窗口。
-
-### 启动
-
-```bash
+# 3) 启动
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-首次会下载 mongo 镜像 + 构建 api/web 镜像（约 3–8 分钟）。完成后浏览器访问 `http://你的服务器IP:8080`。
+服务拓扑：
 
-### 第一次跑灌种子账号（jiangjiang / mengmeng）
-
-```bash
-docker compose -f docker-compose.prod.yml exec \
-  -e SEED_PASSWORD_JIANGJIANG=你的初始密码 \
-  -e SEED_PASSWORD_MENGMENG=你的初始密码 \
-  api node dist/scripts/seed.js
+```
+浏览器 ─► nginx (web 容器, ${WEB_PORT:-8080}) ─┬─► / 静态前端
+                                                └─► /api/* → api 容器:4000 → mongo 容器:27017
 ```
 
-> 如果提示 `Cannot find module 'dist/scripts/seed.js'`，说明 seed 脚本没编入 dist；可以临时把仓库挂进容器手跑 `pnpm seed`，或告诉我，我把 seed 编译目标补进 `tsconfig.build.json`。
+- mongo / api **不映射宿主端口**，仅内网可达
+- uploads 与 mongo data 各挂 named volume 持久化
+- 前端走相对路径 `/api`，同源 cookie，无需 CORS
 
-### 日常运维
+仓库里已经准备好的文件：
 
-```bash
-# 状态 / 日志
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f api
-docker compose -f docker-compose.prod.yml logs -f web
+| 文件 | 作用 |
+|------|------|
+| `Dockerfile.api` | API 多阶段构建（pnpm deploy + sharp 预编译） |
+| `Dockerfile.web` | Vite 构建 → nginx:alpine 托管 |
+| `deploy/nginx.conf` | SPA fallback + `/api` 反代 + SSE 不缓冲 |
+| `docker-compose.prod.yml` | 生产编排：mongo + api + web |
+| `.env.production.example` | 密钥模板 |
+| `.dockerignore` | 减小构建上下文 |
 
-# 改完代码重新部署（增量构建很快）
-git pull
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-
-# 停 / 起
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
-
-# 备份 mongo 数据
-docker run --rm -v momoya_momoya_mongo_data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/mongo-$(date +%F).tgz -C /data .
-
-# 备份用户上传图片 / 头像
-docker run --rm -v momoya_momoya_uploads:/data -v "$PWD":/backup alpine \
-  tar czf /backup/uploads-$(date +%F).tgz -C /data .
-```
-
-### ⚠️ 强烈建议套一层 HTTPS
-
-`apps/api/src/index.ts` 里 session cookie 是 `secure: NODE_ENV === 'production'`——**没有 HTTPS 浏览器就不会发 cookie，登录会直接失败**。两种简单方案二选一：
-
-**方案 A：上游加一台 Caddy 自动管证书（推荐）**
-
-```Caddyfile
-your-domain.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
-Caddy 会自动申请 Let's Encrypt 证书，且会带上 `X-Forwarded-Proto: https`，nginx 透传后 Express 通过 `trust proxy` 正确识别 https。
-
-**方案 B：套 Cloudflare**
-
-域名挂 Cloudflare，SSL/TLS 选 **Full**，源站照样开 8080 端口即可。
-
-### 上线前检查清单
-
-- [ ] `.env.production` 已生成，两个密钥都是真实随机串（不是模板里的空值）
-- [ ] `.env.production` **未** 提交到 git（`.gitignore` 已自动忽略）
-- [ ] 域名解析到服务器、HTTPS 已配置
-- [ ] `WEB_PORT`（默认 8080）已对外开放，或已绑到上游反代
-- [ ] mongo 数据卷 `momoya_momoya_mongo_data`、上传卷 `momoya_momoya_uploads` 已纳入备份计划
+> ⚠️ **`PROFILE_SECRET_KEY` 一旦上线永远不要换**（数据库里加密昵称/简介的密钥，换了数据全废）。
+> ⚠️ **必须配 HTTPS**——session cookie 是 `secure: true`，没 HTTPS 登录直接失败。详见 [DEPLOYMENT.md §3](./DEPLOYMENT.md#3-配置-https必做)。
 
 ---
 
