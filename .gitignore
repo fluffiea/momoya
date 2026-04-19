@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 .env
+.env.production
+!.env.production.example
 
 # 本地上传头像（保留目录结构）
 apps/api/uploads/avatars/*

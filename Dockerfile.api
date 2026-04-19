@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.7
+# ─────────────────────────────────────────────────────────────────────────────
+# Momoya API 镜像（多阶段构建）
+#
+# 关键点：
+# 1. 选 debian-slim（不是 alpine）：sharp 在 debian/glibc 上有官方预编译二进制，
+#    在 alpine/musl 上需要 vips 源码编译，慢且容易踩坑。
+# 2. monorepo 用 pnpm deploy 把 @momoya/api 的依赖单独"铺"出来，
+#    runtime 镜像里就不再有整个 workspace 的冗余文件。
+# 3. uploads/ 目录在容器里只创建空挂载点，真正持久化交给 docker volume。
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARG NODE_VERSION=20
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
+WORKDIR /repo
+
+# ── builder：完整 install + 编译 TS ────────────────────────────────────────────
+FROM base AS builder
+
+# 先复制 lockfile 与 workspace manifest，最大化层缓存
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json apps/api/
+COPY packages/shared/package.json packages/shared/
+
+# 装 sharp 需要的预编译二进制；frozen-lockfile 保证可复现
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# 复制其余源码并编译
+COPY tsconfig*.json ./
+COPY packages/shared packages/shared
+COPY apps/api apps/api
+
+RUN pnpm --filter @momoya/api run build
+
+# 把 @momoya/api 的运行时依赖单独"铺"到 /out（含已编译 dist）
+RUN pnpm --filter @momoya/api deploy --prod --legacy /out
+
+# ── runtime：极简镜像，只有 node + 生产依赖 + dist ─────────────────────────────
+FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+ENV NODE_ENV=production
+ENV PORT=4000
+WORKDIR /app
+
+# 非 root 用户，安全起见
+RUN groupadd --system --gid 1001 nodejs \
+ && useradd  --system --uid 1001 --gid nodejs nodejs
+
+COPY --from=builder --chown=nodejs:nodejs /out ./
+
+# 容器内创建 uploads 占位目录（实际数据由 volume 挂载持久化）
+RUN mkdir -p /app/uploads/avatars /app/uploads/daily-images \
+ && chown -R nodejs:nodejs /app/uploads
+
+USER nodejs
+EXPOSE 4000
+CMD ["node", "dist/index.js"]

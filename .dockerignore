@@ -1,0 +1,30 @@
+# 减小构建上下文，加速 docker build
+**/node_modules
+**/dist
+**/dist-ssr
+**/.turbo
+**/.cache
+
+# 本地数据/上传，不进镜像（生产用 named volume）
+apps/api/uploads/avatars/*
+apps/api/uploads/daily-images/*
+!apps/api/uploads/avatars/.gitkeep
+!apps/api/uploads/daily-images/.gitkeep
+
+# 环境变量与本地配置
+.env
+.env.*
+!.env.production.example
+
+# 日志/编辑器/系统
+*.log
+.DS_Store
+.idea
+.vscode
+
+# Git 元信息
+.git
+.github
+
+# Husky 钩子
+.husky

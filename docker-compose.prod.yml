@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Momoya 生产部署 compose
+#
+# 用法：
+#   1) 复制 .env.production.example -> .env.production，按需填密钥
+#   2) docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# 服务拓扑：
+#   mongo (内网) ──┐
+#                  ├─ api (内网, 暴露 4000 仅给 web)
+#   web (nginx) ───┘   ── 对外暴露 ${WEB_PORT:-8080}
+#
+# 注意：mongo 与 api 都不映射宿主端口，仅在 compose 内网可达，减少攻击面。
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - momoya_mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: momoya
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017/momoya
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET 必填}
+      PROFILE_SECRET_KEY: ${PROFILE_SECRET_KEY:?PROFILE_SECRET_KEY 必填}
+    volumes:
+      # 用户上传文件持久化（Dockerfile 里 chown 给 nodejs:1001）
+      - momoya_uploads:/app/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${WEB_PORT:-8080}:80'
+
+volumes:
+  momoya_mongo_data:
+  momoya_uploads:
