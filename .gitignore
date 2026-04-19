@@ -15,6 +15,10 @@ dist-ssr
 .env.production
 !.env.production.example
 
+# SSL 证书（**永远**不要提交私钥到 git）
+deploy/certs/*
+!deploy/certs/.gitkeep
+
 # 本地上传头像（保留目录结构）
 apps/api/uploads/avatars/*
 !apps/api/uploads/avatars/.gitkeep

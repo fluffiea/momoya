@@ -57,7 +57,14 @@ services:
     depends_on:
       - api
     ports:
-      - '${WEB_PORT:-8080}:80'
+      # 80：HTTP→HTTPS 跳转（国内未备案域名 80 可能被运营商拦截，但保留以兼容海外/备案后场景）
+      - '80:80'
+      # 443：正式 HTTPS 入口
+      - '443:443'
+    volumes:
+      # 把宿主机 deploy/certs/ 下的证书以只读方式挂进容器
+      # 约定文件名：cert.crt（含证书链，腾讯云的 Nginx 格式 _bundle.crt）和 cert.key
+      - ./deploy/certs:/etc/nginx/certs:ro
 
 volumes:
   momoya_mongo_data:
