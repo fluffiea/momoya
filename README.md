@@ -239,7 +239,7 @@ VITE_API_BASE_URL=https://api.example.com pnpm run build
 ```bash
 cd apps/api
 NODE_ENV=production pnpm start
-# 等价：node dist/index.js
+# 等价：node dist/src/index.js
 ```
 
 需长期可用的 **MongoDB**；**头像目录** `apps/api/uploads/avatars` 需持久化（挂载卷或同步备份），否则换机/重装会丢文件。

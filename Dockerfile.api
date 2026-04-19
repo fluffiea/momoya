@@ -57,4 +57,4 @@ RUN mkdir -p /app/uploads/avatars /app/uploads/daily-images \
 
 USER nodejs
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]

@@ -170,6 +170,8 @@ momoya-web-1        Up X minutes             0.0.0.0:8080->80/tcp
 
 ### 2.5 灌入种子账号（jiangjiang / mengmeng）
 
+> ⚠️ **密码完全由你这一步决定**——下面命令里的两个 `<你的初始密码>` 替换成你想用的明文密码（jiangjiang 和 mengmeng 可以用同一个，也可以不同）。这一步**不跑就没有任何用户**，登录会全部失败。
+
 ```bash
 docker compose -f docker-compose.prod.yml exec \
   -e SEED_PASSWORD_JIANGJIANG=<你的初始密码> \
@@ -177,16 +179,15 @@ docker compose -f docker-compose.prod.yml exec \
   api node dist/scripts/seed.js
 ```
 
-> 如果报 `Cannot find module './dist/scripts/seed.js'`，说明 seed 没编进 dist。临时解法：
->
-> ```bash
-> docker compose -f docker-compose.prod.yml exec -it api sh
-> # 容器内：
-> apk add --no-cache --virtual .build pnpm 2>/dev/null || corepack enable
-> # 或者直接用 mongosh 手动插入两个用户（看 apps/api/scripts/seed.ts）
-> ```
->
-> 一劳永逸的修复是把 seed 编译目标加进 `apps/api/tsconfig.build.json`，遇到这个问题告诉我，我帮你改。
+成功的输出：
+
+```
+已创建用户: jiangjiang
+已创建用户: mengmeng
+已写入默认日常条目
+```
+
+> 如果你看到 `用户已存在，跳过: jiangjiang`，说明这个账号已经在数据库里了，**密码不会被覆盖**。要改密码请用第 10.9 节的方法。
 
 ---
 
@@ -617,6 +618,45 @@ docker compose -f docker-compose.prod.yml exec -it mongo mongosh momoya
 > show collections
 > db.dailyentries.find().limit(5).pretty()
 > db.users.find({}, { passwordHash: 0 }).pretty()
+```
+
+### Q9：忘了用户密码，怎么重置？
+
+seed 脚本对已存在的用户**只会跳过、不会覆盖密码**。重置走两步：先删掉用户，再重跑 seed。
+
+```bash
+# 1) 进 mongo 删掉这个用户
+docker compose -f docker-compose.prod.yml exec -it mongo mongosh momoya --eval '
+  db.users.deleteOne({ username: "jiangjiang" })
+'
+
+# 2) 重新 seed（密码改成你想要的新密码）
+docker compose -f docker-compose.prod.yml exec \
+  -e SEED_PASSWORD_JIANGJIANG=<新密码> \
+  -e SEED_PASSWORD_MENGMENG=<新密码> \
+  api node dist/scripts/seed.js
+```
+
+> 删用户**不会丢**他写的日常和评论（那些表里只存 username 字符串，不是外键）。
+
+如果想直接改密码而不删用户，可以在容器里跑：
+
+```bash
+docker compose -f docker-compose.prod.yml exec -it api sh -c '
+  node -e "
+    import(\"bcryptjs\").then(async (b) => {
+      const hash = await b.default.hash(process.argv[1], 12);
+      console.log(hash);
+    });
+  " <新密码>
+'
+# 把上面输出的 hash 复制下来，然后：
+docker compose -f docker-compose.prod.yml exec -it mongo mongosh momoya --eval '
+  db.users.updateOne(
+    { username: "jiangjiang" },
+    { $set: { passwordHash: "<刚才复制的 hash>" } }
+  )
+'
 ```
 
 ---
