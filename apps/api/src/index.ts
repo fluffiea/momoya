@@ -6,8 +6,9 @@ import morgan from 'morgan';
 import mongoose from 'mongoose';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
-import { AVATARS_DIR } from './paths.js';
+import { AVATARS_DIR, DAILY_IMAGES_DIR } from './paths.js';
 import { ensureAvatarsDir } from './lib/avatarFiles.js';
+import { ensureDailyImagesDir } from './lib/dailyImageFiles.js';
 import { healthRouter } from './routes/health.js';
 import { authRouter } from './routes/auth.js';
 import { profileRouter } from './routes/profile.js';
@@ -31,6 +32,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.PROFILE_SECRET_KEY?.tr
 async function main() {
   await mongoose.connect(MONGODB_URI);
   await ensureAvatarsDir();
+  await ensureDailyImagesDir();
 
   const app = express();
   app.set('trust proxy', 1);
@@ -49,6 +51,16 @@ async function main() {
   app.use(
     '/api/static/avatars',
     express.static(AVATARS_DIR, {
+      index: false,
+      setHeaders(res) {
+        res.setHeader('Cache-Control', 'private, max-age=86400');
+      },
+    }),
+  );
+
+  app.use(
+    '/api/static/daily-images',
+    express.static(DAILY_IMAGES_DIR, {
       index: false,
       setHeaders(res) {
         res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -89,6 +101,7 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`API listening on http://127.0.0.1:${PORT}`);
     console.log(`Avatars dir: ${path.resolve(AVATARS_DIR)}`);
+    console.log(`Daily images dir: ${path.resolve(DAILY_IMAGES_DIR)}`);
   });
 }
 

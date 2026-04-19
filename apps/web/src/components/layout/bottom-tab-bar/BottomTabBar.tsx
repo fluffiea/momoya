@@ -10,26 +10,28 @@ import dailyActiveIcon from './icons/daily-active.svg';
 import profileIcon from './icons/profile.svg';
 import profileActiveIcon from './icons/profile-active.svg';
 
-const links = [
-  {
-    path: '/',
-    label: '主页',
-    icon: homeIcon,
-    activeIcon: homeActiveIcon,
-  },
-  {
-    path: '/daily',
-    label: '日常',
-    icon: dailyIcon,
-    activeIcon: dailyActiveIcon,
-  },
-  {
-    path: '/profile',
-    label: '我的',
-    icon: profileIcon,
-    activeIcon: profileActiveIcon,
-  },
+/** 与 PersistentTabsLayout 中 [data-tab-pane=...] 对应，用于双击回顶 */
+type TabKey = 'home' | 'daily' | 'profile';
+
+const links: Array<{
+  path: string;
+  label: string;
+  icon: string;
+  activeIcon: string;
+  tabKey: TabKey;
+}> = [
+  { path: '/', label: '主页', icon: homeIcon, activeIcon: homeActiveIcon, tabKey: 'home' },
+  { path: '/daily', label: '日常', icon: dailyIcon, activeIcon: dailyActiveIcon, tabKey: 'daily' },
+  { path: '/profile', label: '我的', icon: profileIcon, activeIcon: profileActiveIcon, tabKey: 'profile' },
 ];
+
+/** 把对应 tab 的滚动容器拉到顶 */
+function scrollTabToTop(tabKey: TabKey) {
+  const pane = document.querySelector<HTMLElement>(`[data-tab-pane="${tabKey}"]`);
+  if (!pane) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  pane.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+}
 
 function tabClassName(isActive: boolean) {
   return cx(
@@ -78,6 +80,20 @@ const BottomTabBar = () => {
   useLayoutEffect(() => {
     updatePill();
   }, [pathname, updatePill]);
+
+  // 双击 / 双触检测：300ms 内同一个 tab 被点两次 → 滚顶
+  // 兼容 PC 鼠标 dblclick 与移动端触摸（移动端依赖 click，所以手写计时）
+  const lastTapRef = useRef<{ key: TabKey | ''; time: number }>({ key: '', time: 0 });
+  const handleTabClick = useCallback((tabKey: TabKey) => {
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last.key === tabKey && now - last.time < 320) {
+      scrollTabToTop(tabKey);
+      lastTapRef.current = { key: '', time: 0 };
+    } else {
+      lastTapRef.current = { key: tabKey, time: now };
+    }
+  }, []);
 
   useEffect(() => {
     const ro = new ResizeObserver(() => {
@@ -131,6 +147,7 @@ const BottomTabBar = () => {
           to={link.path}
           className={({ isActive }) => tabClassName(isActive)}
           end={link.path === '/'}
+          onClick={() => handleTabClick(link.tabKey)}
         >
           {({ isActive }) => (
             <span className="relative z-10 flex items-center justify-center gap-1.5">

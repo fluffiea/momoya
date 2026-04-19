@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/useAuth';
+import SecondaryPageHeader from '@/components/ui/SecondaryPageHeader';
 import ProfileEditor from './ProfileEditor';
 
 export default function ProfileEditPage() {
@@ -11,20 +12,10 @@ export default function ProfileEditPage() {
   const editorKey = `${user.profile.displayName}|${user.profile.bio}|${user.profile.avatarUrl}`;
 
   return (
-    <div className="home-romance-bg">
-      <div className="mx-auto w-[92%] max-w-md px-0 pb-safe-page pt-4 sm:pt-6">
-        <header className="mb-5 flex items-center gap-2 border-b border-border-sweet/30 pb-3">
-          <button
-            type="button"
-            onClick={() => navigate('/profile')}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg text-neutral-500 transition hover:bg-white/80 hover:text-neutral-800"
-            aria-label="返回"
-          >
-            ‹
-          </button>
-          <h1 className="font-display text-lg font-bold text-brown-title sm:text-xl">编辑资料</h1>
-        </header>
+    <div className="home-romance-bg flex min-h-full flex-col">
+      <SecondaryPageHeader title="编辑资料" backTo="/profile" />
 
+      <div className="mx-auto w-[92%] max-w-md flex-1 px-0 pb-safe-page pt-4 sm:pt-5">
         <ProfileEditor key={editorKey} user={user} refresh={refresh} onDone={() => navigate('/profile')} />
       </div>
     </div>

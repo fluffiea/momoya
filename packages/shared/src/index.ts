@@ -10,9 +10,21 @@ export interface DailyEntry {
   at: string;
   body: string;
   tags: DailyTag[];
+  /** 图片静态 URL 数组（最多 9 张） */
+  images?: string[];
   /** 首次创建者；旧数据可能仅有 updatedByUsername */
   createdByUsername?: string;
   updatedByUsername?: string;
+}
+
+export interface DailyComment {
+  id: string;
+  entryId: string;
+  /** 顶级评论无此字段；回复时为父评论 id */
+  parentId?: string;
+  body: string;
+  username: string;
+  createdAt: string;
 }
 
 export interface UserProfile {
@@ -53,6 +65,13 @@ export interface PatchProfileRequest {
   bio?: string;
 }
 
+/** 日常列表的游标分页响应 */
+export interface DailyEntriesPage {
+  entries: DailyEntry[];
+  /** 下一页游标；null 表示已经到底 */
+  nextCursor: string | null;
+}
+
 export interface CreateDailyEntryRequest {
   at: string;
   body: string;
@@ -63,4 +82,14 @@ export interface UpdateDailyEntryRequest {
   at?: string;
   body?: string;
   tags?: DailyTag[];
+}
+
+export interface CreateDailyCommentRequest {
+  body: string;
+  /** 回复时填父评论 id */
+  parentId?: string;
+}
+
+export interface UpdateDailyCommentRequest {
+  body: string;
 }

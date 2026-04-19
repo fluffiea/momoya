@@ -93,12 +93,12 @@ export default function LinkUsSection() {
       </h2>
       <div className="mx-auto w-[92%] max-w-md">
         <Motion.div
-          className="link-us-stage px-4 py-5 sm:px-6"
+          className="link-us-stage px-4 py-4 sm:px-6 sm:py-5"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
         >
-          <p className="mb-3 text-center font-display text-sm font-bold text-brown-title/90 sm:text-base">
+          <p className="mb-2.5 text-center font-display text-sm font-bold text-brown-title/90 sm:text-base">
             点滴时光，连成我们的故事
           </p>
 
@@ -109,7 +109,7 @@ export default function LinkUsSection() {
             heartPressed={showAnniversary}
           />
 
-          <div className="mt-5 w-full">
+          <div className="mt-4 w-full">
             <AnimatePresence mode="wait" initial={false}>
               {showAnniversary ? (
                 <Motion.div

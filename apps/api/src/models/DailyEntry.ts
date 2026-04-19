@@ -13,6 +13,7 @@ const dailyEntrySchema = new mongoose.Schema(
     at: { type: Date, required: true },
     body: { type: String, required: true },
     tags: { type: [tagSchema], default: [] },
+    images: { type: [String], default: [] },
     createdByUsername: { type: String },
     updatedByUsername: { type: String },
   },

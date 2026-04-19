@@ -14,7 +14,7 @@ export default function ConfessRejectModal({
     <Modal
       visible={visible}
       onClose={onClose}
-      width="min(86%, 16.75rem)"
+      width="min(92%, 19rem)"
       ariaLabelledBy={titleId}
       backdropClassName={CONFESS_MODAL_BACKDROP}
       contentClassName={CONFESS_MODAL_PANEL_REJECT}

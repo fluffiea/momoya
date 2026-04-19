@@ -1,15 +1,17 @@
 import { useMemo, type KeyboardEvent } from 'react';
 import cx from 'classnames';
 import { motion as Motion } from 'framer-motion';
-import HomeRomanceSectionHeading from '@/components/ui/HomeRomanceSectionHeading';
+import SectionLabel from '@/components/ui/SectionLabel';
 import starIcon from './icons/star.svg';
 import { useDailyHitokoto } from './useDailyHitokoto';
+
+const easeOut = [0.22, 1, 0.36, 1] as const;
 
 const LoveNote = () => {
   const { hitokoto, from, fromWho, loading, error, retry, refresh } = useDailyHitokoto();
   const canRefresh = !loading && !error && Boolean(hitokoto);
 
-  const handleCardKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+  const handleSurfaceKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!canRefresh) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -32,21 +34,21 @@ const LoveNote = () => {
 
   return (
     <section
-      className="mx-auto w-[92%] max-w-md px-0 pt-5"
+      className="mx-auto w-[88%] max-w-md"
       aria-labelledby="love-note-heading"
     >
-      <HomeRomanceSectionHeading
-        id="love-note-heading"
-        iconSrc={starIcon}
-        title="今日寄语"
-      />
+      <SectionLabel id="love-note-heading" iconSrc={starIcon} title="今日寄语" />
 
+      {/* 引文主体：刻意去掉卡片，仅靠排版与装饰构成「页面的呼吸点」 */}
       <Motion.div
-        className={cx('love-note-card', canRefresh && 'cursor-pointer')}
-        initial={{ opacity: 0, y: 10 }}
+        className={cx(
+          'mt-6 px-2 sm:mt-7',
+          canRefresh && 'cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-love/35',
+        )}
+        initial={{ opacity: 0, y: 8 }}
         whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-40px' }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        viewport={{ once: true, margin: '-32px' }}
+        transition={{ duration: 0.5, ease: easeOut }}
         aria-busy={loading}
         role={canRefresh ? 'button' : undefined}
         tabIndex={canRefresh ? 0 : undefined}
@@ -55,72 +57,73 @@ const LoveNote = () => {
         onClick={() => {
           if (canRefresh) refresh();
         }}
-        onKeyDown={handleCardKeyDown}
+        onKeyDown={handleSurfaceKeyDown}
       >
-        <div className="relative z-10 px-5 pb-2 pt-5 sm:px-7 sm:pt-5">
+        {loading && (
+          <p className="py-2 text-center text-sm text-neutral-400" aria-live="polite">
+            正在加载今日寄语…
+          </p>
+        )}
+
+        {!loading && error && (
           <div
-            className="mx-auto mb-3.5 h-0.5 w-11 rounded-full bg-love/22 sm:mb-4 sm:w-12"
-            aria-hidden
-          />
-
-          {loading && (
-            <div className="text-center" aria-live="polite">
-              <p className="text-[15px] leading-[1.72] text-neutral-400 sm:text-base">
-                正在加载今日寄语…
-              </p>
-            </div>
-          )}
-
-          {!loading && error && (
-            <div
-              className="flex flex-col items-center gap-3 text-center"
-              role="alert"
-              aria-live="polite"
-            >
-              <p className="max-w-prose text-[15px] font-medium leading-relaxed text-neutral-600">
-                {error}
-              </p>
-              <button
-                type="button"
-                onClick={retry}
-                className="rounded-xl border border-love/25 bg-love/15 px-5 py-2.5 font-display text-sm font-bold text-brown-title/90 transition hover:border-love/35 hover:bg-love/22"
-              >
-                重试
-              </button>
-            </div>
-          )}
-
-          {!loading && !error && hitokoto && (
-            <div className="mx-auto flex w-full max-w-prose flex-col items-center gap-2.5 text-center">
-              <p className="text-[15px] font-medium leading-[1.72] text-neutral-600 sm:text-base sm:leading-[1.78]">
-                “{hitokoto}”
-              </p>
-              {sourceLine && (
-                <p className="text-[13px] leading-relaxed text-neutral-500 sm:text-sm">
-                  <span className="text-neutral-400">—— </span>
-                  {sourceLine}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <footer className="relative z-10 mt-4 flex items-center gap-3 px-5 pb-5 sm:px-7">
-          <span
-            className="h-px min-w-[2rem] flex-1 bg-gradient-to-r from-transparent to-love/22"
-            aria-hidden
-          />
-          <time
-            dateTime={dateIso}
-            className="shrink-0 font-display text-xs font-medium tracking-[0.12em] text-brown-title/50 tabular-nums sm:text-sm"
+            className="flex flex-col items-center gap-2.5 py-2 text-center"
+            role="alert"
+            aria-live="polite"
+            onClick={(e) => e.stopPropagation()}
           >
-            {date}
-          </time>
-          <span
-            className="h-px min-w-[2rem] flex-1 bg-gradient-to-l from-transparent to-love/22"
-            aria-hidden
-          />
-        </footer>
+            <p className="max-w-prose text-sm leading-relaxed text-neutral-500">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={retry}
+              className="rounded-full border border-love/30 bg-white/70 px-4 py-1.5 font-display text-xs font-bold text-brown-title/80 transition hover:border-love/50 hover:bg-white"
+            >
+              重试
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && hitokoto && (
+          <figure className="mx-auto flex max-w-[26rem] flex-col items-center text-center">
+            {/* 大引号装饰：作为视觉锚点 */}
+            <span
+              aria-hidden
+              className="-mb-2 select-none font-display text-[42px] leading-none text-love/55 sm:-mb-3 sm:text-[50px]"
+            >
+              &ldquo;
+            </span>
+
+            <blockquote className="px-1 font-display text-[15px] leading-[1.95] tracking-[0.02em] text-neutral-700 sm:text-[16px] sm:leading-[2]">
+              {hitokoto}
+            </blockquote>
+
+            {sourceLine && (
+              <figcaption className="mt-3 text-[12px] tracking-wide text-neutral-400 sm:text-[13px]">
+                —— {sourceLine}
+              </figcaption>
+            )}
+
+            {/* 日期分隔：浪漫的落款 */}
+            <div className="mt-5 flex items-center gap-3 sm:mt-6">
+              <span
+                aria-hidden
+                className="h-px w-8 bg-gradient-to-r from-transparent to-love/35 sm:w-10"
+              />
+              <time
+                dateTime={dateIso}
+                className="font-display text-[11px] font-medium tracking-[0.22em] tabular-nums text-brown-title/55 sm:text-[12px]"
+              >
+                {date}
+              </time>
+              <span
+                aria-hidden
+                className="h-px w-8 bg-gradient-to-l from-transparent to-love/35 sm:w-10"
+              />
+            </div>
+          </figure>
+        )}
       </Motion.div>
     </section>
   );

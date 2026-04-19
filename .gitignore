@@ -17,6 +17,10 @@ dist-ssr
 apps/api/uploads/avatars/*
 !apps/api/uploads/avatars/.gitkeep
 
+# 日常图片上传（保留目录结构）
+apps/api/uploads/daily-images/*
+!apps/api/uploads/daily-images/.gitkeep
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

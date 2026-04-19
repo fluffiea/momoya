@@ -9,16 +9,16 @@ const listVariants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.07, delayChildren: 0.04 },
+    transition: { staggerChildren: 0.08, delayChildren: 0.04 },
   },
 };
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 8 },
+  hidden: { opacity: 0, y: 10 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+    transition: { duration: 0.36, ease: [0.22, 1, 0.36, 1] as const },
   },
 };
 
@@ -40,11 +40,10 @@ const Letter = (props: LetterProps) => {
   } = props;
 
   const navigate = useNavigate();
+  const stampDate = tags[0];
 
   const handleClick = () => {
-    if (path) {
-      navigate(path);
-    }
+    if (path) navigate(path);
   };
 
   return (
@@ -58,37 +57,59 @@ const Letter = (props: LetterProps) => {
           handleClick();
         }
       }}
-      className={cx(
-        'heart-letter-card flex min-h-0 cursor-pointer flex-col items-center gap-2 p-4 text-center transition duration-200 sm:gap-2.5 sm:p-[18px]',
-        'hover:border-love/32 hover:shadow-[0_6px_22px_rgb(249_172_201/0.16)]',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-love/50',
-      )}
       onClick={handleClick}
       aria-label={`打开${title}`}
+      className={cx(
+        'heart-letter-card group relative flex cursor-pointer items-center gap-3.5 px-3.5 py-3 sm:gap-4 sm:px-4 sm:py-3.5',
+      )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-b from-love/35 to-love/52 ring-1 ring-white/70 shadow-sm sm:h-11 sm:w-11">
+      {/* 封蜡章 */}
+      <span
+        className="heart-letter-seal relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-[52px] sm:w-[52px]"
+        aria-hidden
+      >
         <img
           src={icon}
           alt=""
-          className="h-6 w-6 sm:h-7 sm:w-7"
+          className="relative z-10 h-5 w-5 brightness-0 invert sm:h-[22px] sm:w-[22px]"
+          style={{ filter: 'drop-shadow(0 1px 0 rgb(217 138 168 / 0.35))' }}
         />
       </span>
-      <h3 className="line-clamp-2 w-full font-display text-base font-bold leading-snug text-brown-title sm:text-lg">
-        {title}
-      </h3>
-      <p className="line-clamp-2 w-full text-xs leading-snug text-neutral-700 sm:text-sm">
-        {subTitle}
-      </p>
-      <div className="mt-auto flex w-full flex-wrap items-center justify-center gap-1 pt-0.5">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="inline-block shrink-0 rounded-full bg-love/14 px-2 py-0.5 text-[11px] font-medium text-brown-title/85 sm:text-xs"
-          >
-            {tag}
-          </span>
-        ))}
+
+      {/* 文字区 */}
+      <div className="min-w-0 flex-1 pr-12 sm:pr-14">
+        <h3 className="truncate font-display text-[15px] font-bold leading-tight text-brown-title sm:text-base">
+          {title}
+        </h3>
+        {subTitle && (
+          <p className="mt-1 line-clamp-1 text-[12px] italic leading-snug text-neutral-500 sm:text-[13px]">
+            “{subTitle}”
+          </p>
+        )}
+        {/* 装饰：信纸下划线 */}
+        <span
+          aria-hidden
+          className="mt-2 block h-px w-12 bg-gradient-to-r from-love/40 to-transparent sm:w-14"
+        />
       </div>
+
+      {/* 邮戳日期 */}
+      {stampDate && (
+        <span
+          aria-hidden
+          className="heart-letter-stamp absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md px-1.5 py-0.5 font-display text-[10px] font-bold tracking-[0.06em] tabular-nums sm:px-2 sm:text-[11px]"
+        >
+          {stampDate}
+        </span>
+      )}
+
+      {/* 右侧箭头指示（hover 显） */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-2 bottom-1.5 text-[10px] text-love/0 transition group-hover:text-love/60"
+      >
+        ›
+      </span>
     </Motion.div>
   );
 };
@@ -96,7 +117,7 @@ const Letter = (props: LetterProps) => {
 const HeartLetter = () => {
   return (
     <section
-      className="mx-auto w-[92%] max-w-md px-0 pt-6"
+      className="mx-auto w-[92%] max-w-md px-0"
       aria-labelledby="heart-letter-heading"
     >
       <HomeRomanceSectionHeading
@@ -106,7 +127,7 @@ const HeartLetter = () => {
       />
 
       <Motion.div
-        className="grid grid-cols-2 gap-2.5 sm:gap-3"
+        className="flex flex-col gap-2.5 sm:gap-3"
         variants={listVariants}
         initial="hidden"
         whileInView="show"

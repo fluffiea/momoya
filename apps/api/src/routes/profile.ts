@@ -1,10 +1,11 @@
 import path from 'node:path';
-import { unlink } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
+import sharp from 'sharp';
 import { User } from '../models/User.js';
 import { toUserPublic } from '../lib/userPublic.js';
 import { requireAuth } from '../middleware/requireAuth.js';
@@ -26,25 +27,18 @@ const passwordChangeLimiter = rateLimit({
   message: { error: '尝试次数过多，请稍后再试' },
 });
 
-const mimeToExt: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-};
+const ALLOWED_UPLOAD_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+/** 头像统一裁剪/压缩参数 */
+const AVATAR_OUTPUT_SIZE = 512;
+const AVATAR_OUTPUT_EXT = '.webp';
+
+// 用 memoryStorage：先把上传文件读到内存，由 sharp 处理后写入磁盘
 const avatarUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      cb(null, AVATARS_DIR);
-    },
-    filename: (_req, file, cb) => {
-      const ext = mimeToExt[file.mimetype]!;
-      cb(null, `${randomUUID()}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 3 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (mimeToExt[file.mimetype]) {
+    if (ALLOWED_UPLOAD_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('仅支持 JPEG、PNG、WebP'));
@@ -140,23 +134,49 @@ profileRouter.post(
     }
     const user = await User.findById(req.session.userId);
     if (!user) {
-      await unlink(req.file.path).catch(() => {});
       res.status(401).json({ error: '未登录' });
       return;
     }
-    const name = path.basename(req.file.filename);
-    if (!isSafeAvatarFilename(name)) {
-      await unlink(req.file.path).catch(() => {});
+
+    // sharp 居中"cover"裁剪 → 正方形 → 缩放到 512×512 → 输出 webp。
+    // 这样无论原图比例如何，存盘的头像都是 1:1，前端任意位置展示都不会出现黑边/拉伸。
+    let processed: Buffer;
+    try {
+      processed = await sharp(req.file.buffer, { failOn: 'error' })
+        .rotate() // 自动应用 EXIF 方向，避免手机拍的图旋转错位
+        .resize(AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE, {
+          fit: 'cover',
+          position: 'attention', // 智能选择主体居中（人像通常会保留脸部）
+        })
+        .webp({ quality: 88 })
+        .toBuffer();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '图片处理失败';
+      res.status(400).json({ error: `图片处理失败：${msg}` });
+      return;
+    }
+
+    const filename = `${randomUUID()}${AVATAR_OUTPUT_EXT}`;
+    if (!isSafeAvatarFilename(filename)) {
       res.status(500).json({ error: '无效文件名' });
       return;
     }
+    const fullPath = path.join(AVATARS_DIR, filename);
+    try {
+      await writeFile(fullPath, processed);
+    } catch {
+      res.status(500).json({ error: '保存图片失败' });
+      return;
+    }
+
     const prev = user.profile?.avatarUrl;
-    const nextUrl = `${AVATAR_STATIC_PREFIX}${name}`;
+    const nextUrl = `${AVATAR_STATIC_PREFIX}${filename}`;
     user.profile.avatarUrl = nextUrl;
     try {
       await user.save();
     } catch {
-      await unlink(req.file.path).catch(() => {});
+      // 写库失败：回滚刚写的文件
+      tryDeleteAvatarFile(nextUrl);
       res.status(500).json({ error: '保存失败' });
       return;
     }

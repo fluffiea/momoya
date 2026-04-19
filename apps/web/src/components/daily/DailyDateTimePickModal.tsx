@@ -58,18 +58,18 @@ function parseTimeParts(t: string): { h: number; m: number } {
 
 /** 与登录页 Radix Select 同系，保证弹层风格一致 */
 const timeTriggerClass =
-  'flex h-9 w-full items-center justify-between gap-1.5 rounded-xl border border-border-sweet/60 bg-white/95 px-2.5 text-left text-xs font-medium text-brown-title/90 outline-none transition data-[placeholder]:text-neutral-400 focus:border-love/50 focus:ring-2 focus:ring-love/25';
+  'flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border-sweet/60 bg-white/95 px-3 text-left text-sm font-medium tabular-nums text-brown-title/90 outline-none transition data-[placeholder]:text-neutral-400 focus:border-love/50 focus:ring-2 focus:ring-love/25';
 
 const timeContentClass =
   'z-[1150] overflow-hidden rounded-xl border border-border-sweet/45 bg-white/98 shadow-[0_8px_32px_rgb(249_172_201/0.22)] ring-1 ring-love/10';
 
 const timeItemClass =
-  'relative flex cursor-pointer select-none items-center rounded-lg px-2.5 py-2 text-xs text-brown-title/90 outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-rose-50/90 data-[state=checked]:bg-love/12 data-[state=checked]:font-semibold data-[state=checked]:text-love';
+  'relative flex cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-[13px] tabular-nums text-brown-title/90 outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-rose-50/90 data-[state=checked]:bg-love/12 data-[state=checked]:font-semibold data-[state=checked]:text-love';
 
 function ChevronDown() {
   return (
     <Select.Icon className="shrink-0 text-love/55" aria-hidden>
-      <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
         <path
           fillRule="evenodd"
           d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
@@ -95,7 +95,7 @@ function TimeUnitSelect({
 }) {
   return (
     <div>
-      <span className="mb-0.5 block text-[11px] font-medium text-neutral-600">{label}</span>
+      <span className="mb-1 block text-[11px] font-medium tracking-wide text-brown-title/55">{label}</span>
       <Select.Root value={String(value)} onValueChange={(v) => onValueChange(parseInt(v, 10))}>
         <Select.Trigger className={timeTriggerClass} aria-label={label}>
           <Select.Value>{formatOption(value)}</Select.Value>
@@ -105,10 +105,10 @@ function TimeUnitSelect({
           <Select.Content
             className={`${timeContentClass} min-w-[var(--radix-select-trigger-width)]`}
             position="popper"
-            sideOffset={5}
+            sideOffset={6}
             align="start"
           >
-            <Select.Viewport className="max-h-40 overflow-y-auto p-1">
+            <Select.Viewport className="max-h-56 overflow-y-auto p-1">
               {options.map((n) => (
                 <Select.Item key={n} value={String(n)} className={timeItemClass}>
                   <Select.ItemText>{formatOption(n)}</Select.ItemText>
@@ -188,30 +188,30 @@ export default function DailyDateTimePickModal({ open, onClose, atDate, atTime, 
     <Modal
       visible={open}
       onClose={onClose}
-      width="min(92%, 19rem)"
+      width="min(92%, 22rem)"
       panelScrollable={false}
       closeOnBackdropClick
       ariaLabelledBy={titleId}
       backdropClassName="fixed inset-0 z-[1100] flex items-center justify-center bg-black/25 backdrop-blur-[2px]"
-      contentClassName="rounded-[22px] border border-border-sweet/45 bg-gradient-to-b from-white via-white to-rose-50/70 p-3 pb-3.5 shadow-[0_8px_40px_rgb(249_172_201/0.2)] ring-1 ring-love/10"
+      contentClassName="rounded-[22px] border border-border-sweet/45 bg-gradient-to-b from-white via-white to-rose-50/70 p-4 pb-4 shadow-[0_8px_40px_rgb(249_172_201/0.2)] ring-1 ring-love/10"
     >
-      <h2 id={titleId} className="font-display text-center text-[15px] font-bold leading-tight text-brown-title">
+      <h2 id={titleId} className="font-display text-center text-[16px] font-bold leading-tight text-brown-title">
         选择日期与时间
       </h2>
-      <p className="mt-0.5 text-center text-[10px] leading-snug text-neutral-400">选好后点确定写回表单</p>
+      <p className="mt-1 text-center text-[11px] leading-snug text-brown-title/45">选好后点确定写回表单</p>
 
       <div
-        className="mt-2 [&_.rdp-month]:!p-0 [&_.rdp-nav]:!h-9 [&_.rdp-root]:mx-auto [&_.rdp-root]:font-display [&_.rdp-weekday]:text-[10px] [&_.rdp-weekday]:text-brown-title/55 [&_.rdp-caption_label]:text-[13px] [&_.rdp-caption_label]:font-semibold [&_.rdp-caption_label]:text-brown-title/85"
+        className="mt-3 [&_.rdp-month]:!p-0 [&_.rdp-nav]:!h-10 [&_.rdp-root]:mx-auto [&_.rdp-root]:font-display [&_.rdp-weekday]:text-[11px] [&_.rdp-weekday]:font-medium [&_.rdp-weekday]:text-brown-title/55 [&_.rdp-caption_label]:text-[14px] [&_.rdp-caption_label]:font-semibold [&_.rdp-caption_label]:text-brown-title/90 [&_.rdp-day_button]:text-[13px]"
         style={
           {
             '--rdp-accent-color': '#e891b0',
             '--rdp-accent-background-color': 'rgb(255 245 248)',
-            '--rdp-day_button-border-radius': '0.5rem',
-            '--rdp-day-height': '2rem',
-            '--rdp-day-width': '2rem',
-            '--rdp-day_button-height': '1.95rem',
-            '--rdp-day_button-width': '1.95rem',
-            '--rdp-nav-height': '2.25rem',
+            '--rdp-day_button-border-radius': '0.6rem',
+            '--rdp-day-height': '2.35rem',
+            '--rdp-day-width': '2.35rem',
+            '--rdp-day_button-height': '2.25rem',
+            '--rdp-day_button-width': '2.25rem',
+            '--rdp-nav-height': '2.5rem',
           } as CSSProperties
         }
       >
@@ -226,34 +226,37 @@ export default function DailyDateTimePickModal({ open, onClose, atDate, atTime, 
         />
       </div>
 
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
-        <TimeUnitSelect
-          label="时"
-          value={draftHour}
-          onValueChange={setDraftHour}
-          options={hourOptions}
-          formatOption={(n) => `${pad2(n)} 时`}
-        />
-        <TimeUnitSelect
-          label="分"
-          value={draftMinute}
-          onValueChange={setDraftMinute}
-          options={minuteOptions}
-          formatOption={(n) => `${pad2(n)} 分`}
-        />
+      {/* 时分分隔线，让上面的日历与下面的时间选择有清晰节奏 */}
+      <div className="mt-3 border-t border-border-sweet/35 pt-3">
+        <div className="grid grid-cols-2 gap-2.5">
+          <TimeUnitSelect
+            label="时"
+            value={draftHour}
+            onValueChange={setDraftHour}
+            options={hourOptions}
+            formatOption={(n) => `${pad2(n)} 时`}
+          />
+          <TimeUnitSelect
+            label="分"
+            value={draftMinute}
+            onValueChange={setDraftMinute}
+            options={minuteOptions}
+            formatOption={(n) => `${pad2(n)} 分`}
+          />
+        </div>
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-4 flex gap-2.5">
         <button
           type="button"
-          className="flex-1 rounded-xl border border-border-sweet/50 py-2 text-xs font-medium text-neutral-600 transition hover:bg-white/90"
+          className="flex-1 rounded-xl border border-border-sweet/55 py-2.5 text-[13px] font-medium text-neutral-600 transition hover:bg-white/90"
           onClick={onClose}
         >
           取消
         </button>
         <button
           type="button"
-          className="flex-1 rounded-xl bg-[#e891b0] py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-105"
+          className="flex-1 rounded-xl bg-[#e891b0] py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgb(232_145_176/0.32)] transition hover:bg-[#d4769a]"
           onClick={handleConfirm}
         >
           确定

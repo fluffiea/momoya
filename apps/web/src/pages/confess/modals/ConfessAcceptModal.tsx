@@ -10,7 +10,7 @@ export default function ConfessAcceptModal({ visible = false, onClose = () => {}
     <Modal
       visible={visible}
       onClose={onClose}
-      width="min(88%, 18rem)"
+      width="min(92%, 20.25rem)"
       ariaLabelledBy={titleId}
       backdropClassName={CONFESS_MODAL_BACKDROP}
       contentClassName={CONFESS_MODAL_PANEL_ACCEPT}

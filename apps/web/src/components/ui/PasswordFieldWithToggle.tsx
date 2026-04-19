@@ -2,28 +2,41 @@ import { useId, useState } from 'react';
 
 type Props = {
   id?: string;
-  label: string;
+  /** 显示的标签；不传时不渲染 label（用 ariaLabel 代替） */
+  label?: string;
+  /** label 不显示时的可访问性名称 */
+  ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
   autoComplete?: string;
 };
 
-export default function PasswordFieldWithToggle({ id: idProp, label, value, onChange, autoComplete }: Props) {
+export default function PasswordFieldWithToggle({
+  id: idProp,
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  autoComplete,
+}: Props) {
   const uid = useId();
   const id = idProp ?? `pw-${uid}`;
   const [visible, setVisible] = useState(false);
 
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-neutral-600">
-        {label}
-      </label>
+      {label ? (
+        <label htmlFor={id} className="mb-1.5 block text-[12px] font-medium text-brown-title/65">
+          {label}
+        </label>
+      ) : null}
       <div className="relative rounded-xl border border-border-sweet/60 bg-white/95 transition focus-within:border-love/50 focus-within:ring-2 focus-within:ring-love/25">
         <input
           id={id}
           type={visible ? 'text' : 'password'}
           autoComplete={autoComplete}
-          className="w-full rounded-xl border-0 bg-transparent py-2.5 pl-3 pr-11 text-sm text-neutral-800 outline-none"
+          aria-label={!label ? (ariaLabel ?? '密码') : undefined}
+          className="w-full rounded-xl border-0 bg-transparent py-2.5 pl-3.5 pr-11 text-sm text-neutral-800 outline-none"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

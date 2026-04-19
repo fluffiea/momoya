@@ -3,7 +3,7 @@ import { motion as Motion, useReducedMotion } from 'framer-motion';
 import ApologyPasswordGate from './ApologyPasswordGate';
 import { readApologyUnlocked, writeApologyUnlocked } from './apologyAuth';
 
-const DATE_LINE = '2026-02-20';
+const DATE_LINE = '2026.02.20';
 
 const PARAGRAPHS = [
   '我错了宝宝！',
@@ -26,44 +26,64 @@ const Apology = () => {
 
   const cardTransition = reduceMotion
     ? { duration: 0.2 }
-    : { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const };
+    : { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const };
 
   if (!unlocked) {
     return <ApologyPasswordGate onSuccess={handleUnlock} />;
   }
 
   return (
-    <div className="home-romance-bg px-5 py-8 pb-safe-page">
-      <div className="mx-auto max-w-xl">
-        <Motion.div
-          className="love-note-card px-5 pb-6 pt-6 sm:px-6"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={cardTransition}
-        >
-          <header className="border-b border-border-sweet/30 pb-5 text-center">
-            <h1 className="font-display text-2xl font-bold tracking-wide text-brown-title sm:text-[1.65rem]">
+    <div className="home-romance-bg px-4 pt-8 pb-safe-page sm:pt-10">
+      <Motion.div
+        className="mx-auto max-w-xl"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={cardTransition}
+      >
+        {/* 信封纸主体 */}
+        <div className="letter-envelope relative rounded-[28px] border border-white/65 px-5 pt-12 pb-7 sm:px-7 sm:pt-14 sm:pb-8">
+          {/* 大封蜡章：浮在顶部中心 */}
+          <span
+            className="letter-wax-seal absolute left-1/2 -top-7 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full sm:h-[60px] sm:w-[60px]"
+            aria-hidden
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="white"
+              className="relative h-6 w-6 drop-shadow-[0_1px_1px_rgb(140_40_70/0.5)] sm:h-7 sm:w-7"
+            >
+              <path d="M12 21s-7-4.5-9.5-9C.5 8.5 2.5 4 7 4c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4.5 0 6.5 4.5 4.5 8-2.5 4.5-9.5 9-9.5 9z" />
+            </svg>
+          </span>
+
+          {/* 邮戳：右上角圆章 */}
+          <span
+            className="letter-postmark absolute right-4 top-4 flex h-14 w-14 select-none items-center justify-center rounded-full font-display text-[10px] font-bold leading-tight tracking-[0.04em] text-love/85 sm:right-5 sm:top-5 sm:h-[60px] sm:w-[60px] sm:text-[11px]"
+            aria-hidden
+          >
+            <span className="text-center tabular-nums">
+              {DATE_LINE.replace(/\./g, '\n')}
+            </span>
+          </span>
+
+          {/* 标题 */}
+          <header className="text-center">
+            <h1 className="font-display text-[26px] font-bold tracking-[0.04em] text-brown-title sm:text-[30px]">
               道歉信
             </h1>
-            <div
-              className="mx-auto mt-3 flex max-w-[min(18rem,100%)] items-center gap-2.5 px-1"
-              aria-hidden
-            >
-              <span className="h-px min-w-[1.5rem] flex-1 bg-gradient-to-r from-transparent via-love/30 to-love/40" />
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-love/15 text-[0.85rem] shadow-inner ring-1 ring-white/70">
-                💌
+            <div className="mx-auto mt-2 flex max-w-[14rem] items-center gap-2.5" aria-hidden>
+              <span className="h-px flex-1 bg-gradient-to-r from-transparent to-love/40" />
+              <span className="font-display text-[11px] tracking-[0.32em] text-brown-title/55">
+                给我的宝宝
               </span>
-              <span className="h-px min-w-[1.5rem] flex-1 bg-gradient-to-l from-transparent via-love/30 to-love/40" />
+              <span className="h-px flex-1 bg-gradient-to-l from-transparent to-love/40" />
             </div>
-            <p className="mt-3 font-display text-[11px] font-medium tracking-[0.2em] text-love/50">
-              犯错时间
-            </p>
-            <p className="mt-1 font-display text-sm tabular-nums text-brown-title/80">{DATE_LINE}</p>
           </header>
 
-          <div className="relative mt-6">
+          {/* 正文 */}
+          <div className="relative mt-7">
             <div
-              className="confess-letter-paper pointer-events-none absolute inset-0 opacity-[0.38]"
+              className="apology-letter-paper pointer-events-none absolute inset-0 opacity-[0.7]"
               aria-hidden
             />
             <div className="relative text-[15px] leading-[1.78] text-neutral-600/95 sm:text-base">
@@ -82,9 +102,18 @@ const Apology = () => {
                 ),
               )}
             </div>
+
+            {/* 落款 */}
+            <div className="mt-6 text-right text-[13px] text-brown-title/60 sm:mt-7">
+              <p className="font-display italic">—— 一个知道错了的我</p>
+            </div>
           </div>
-        </Motion.div>
-      </div>
+        </div>
+
+        <p className="mt-5 text-center font-display text-[12px] tracking-[0.22em] text-brown-title/50 sm:text-[13px]">
+          请收下这封信
+        </p>
+      </Motion.div>
     </div>
   );
 };

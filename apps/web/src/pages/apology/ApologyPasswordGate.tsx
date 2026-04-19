@@ -14,6 +14,7 @@ export default function ApologyPasswordGate({ onSuccess }: ApologyPasswordGatePr
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -44,7 +45,7 @@ export default function ApologyPasswordGate({ onSuccess }: ApologyPasswordGatePr
         visible
         closeOnBackdropClick={false}
         onClose={() => {}}
-        width="min(90%, 20rem)"
+        width="min(92%, 22.25rem)"
         ariaLabelledBy={titleId}
         backdropClassName={APOLOGY_MODAL_BACKDROP}
         contentClassName={APOLOGY_MODAL_PANEL}
@@ -64,24 +65,60 @@ export default function ApologyPasswordGate({ onSuccess }: ApologyPasswordGatePr
           <label htmlFor="apology-pwd" className="sr-only">
             四位数密码
           </label>
-          <input
-            ref={inputRef}
-            id="apology-pwd"
-            type="password"
-            name="apology-password"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={4}
-            value={value}
-            aria-invalid={error ? 'true' : 'false'}
-            aria-describedby={error ? 'apology-pwd-error' : undefined}
-            onChange={(e) => {
-              setValue(e.target.value.replace(/\D/g, '').slice(0, 4));
-              if (error) setError('');
-            }}
-            className="mt-4 w-full rounded-xl border border-border-sweet/60 bg-white px-3 py-2.5 text-center font-mono text-lg tracking-[0.35em] text-neutral-800 shadow-inner outline-none ring-love/0 transition placeholder:text-neutral-300 focus:border-love/50 focus:ring-2 focus:ring-love/25"
-            placeholder="••••"
-          />
+          <div
+            className="relative mt-5"
+            onClick={() => inputRef.current?.focus()}
+          >
+            {/* 真正的输入框：透明覆盖整个区域 */}
+            <input
+              ref={inputRef}
+              id="apology-pwd"
+              type="password"
+              name="apology-password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              value={value}
+              aria-invalid={error ? 'true' : 'false'}
+              aria-describedby={error ? 'apology-pwd-error' : undefined}
+              onChange={(e) => {
+                setValue(e.target.value.replace(/\D/g, '').slice(0, 4));
+                if (error) setError('');
+              }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              className="absolute inset-0 z-10 h-full w-full cursor-text rounded-xl bg-transparent text-center font-mono text-transparent caret-transparent outline-none"
+              style={{ letterSpacing: '0.6em' }}
+            />
+            {/* 视觉：4 个圆点格子 */}
+            <div
+              className="pointer-events-none flex items-center justify-center gap-2.5 sm:gap-3"
+              aria-hidden
+            >
+              {[0, 1, 2, 3].map((i) => {
+                const filled = value.length > i;
+                const isCaret = focused && value.length === i;
+                return (
+                  <span
+                    key={i}
+                    className={`flex h-12 w-10 items-center justify-center rounded-xl border transition sm:h-[52px] sm:w-11 ${
+                      filled
+                        ? 'border-love/55 bg-rose-50/60 shadow-[0_2px_8px_rgb(249_172_201/0.25)]'
+                        : isCaret
+                          ? 'border-love/45 bg-white ring-2 ring-love/25'
+                          : 'border-border-sweet/60 bg-white/80'
+                    }`}
+                  >
+                    {filled ? (
+                      <span className="block h-2.5 w-2.5 rounded-full bg-[#e891b0]" />
+                    ) : isCaret ? (
+                      <span className="block h-5 w-px animate-pulse bg-love/70" />
+                    ) : null}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
           {error ? (
             <p
               id="apology-pwd-error"
