@@ -45,6 +45,12 @@ ENV NODE_ENV=production
 ENV PORT=4000
 WORKDIR /app
 
+# gosu：以 root 启动后降权到 nodejs 用户的标准工具
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gosu \
+ && rm -rf /var/lib/apt/lists/* \
+ && gosu nobody true
+
 # 非 root 用户，安全起见
 RUN groupadd --system --gid 1001 nodejs \
  && useradd  --system --uid 1001 --gid nodejs nodejs
@@ -55,6 +61,11 @@ COPY --from=builder --chown=nodejs:nodejs /out ./
 RUN mkdir -p /app/uploads/avatars /app/uploads/daily-images \
  && chown -R nodejs:nodejs /app/uploads
 
-USER nodejs
+# 启动前自动修正 uploads 所有权（解决 docker named volume 默认归 root 的问题），
+# 然后降权到 nodejs 运行真正的进程。注意：ENTRYPOINT 必须以 root 运行。
+COPY deploy/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+RUN chmod +x /usr/local/bin/api-entrypoint.sh
+
 EXPOSE 4000
+ENTRYPOINT ["/usr/local/bin/api-entrypoint.sh"]
 CMD ["node", "dist/src/index.js"]
