@@ -12,7 +12,7 @@ pnpm monorepo：**`apps/web`**（Vite + React + React Router）、**`apps/api`**
 
 完整的"从零到上线"操作手册见 **[DEPLOYMENT.md](./DEPLOYMENT.md)**——包含服务器初始化、HTTPS、备份、灾备、故障排查全流程，按顺序复制粘贴即可。
 
-简版 3 步速览：
+简版 4 步速览：
 
 ```bash
 # 1) 在服务器上拉代码
@@ -28,7 +28,17 @@ chmod 600 .env.production
 
 # 3) 启动
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+# 4) 灌入两个用户（jiangjiang / mengmeng）—— 密码由你自己定，下面两个占位符替换为真实密码
+docker compose -f docker-compose.prod.yml exec \
+  -e SEED_PASSWORD_JIANGJIANG=<你想要的密码> \
+  -e SEED_PASSWORD_MENGMENG=<你想要的密码> \
+  api node dist/scripts/seed.js
 ```
+
+> 项目**没有"默认密码"**——`jiangjiang` 和 `mengmeng` 两个账号是 seed 命令现场创建的，密码就是你在第 4 步环境变量里填的那个值。
+>
+> 如果第 4 步报 `用户已存在`（比如你跑过一次了），密码不会被覆盖。要改密码看 [DEPLOYMENT.md §10.9](./DEPLOYMENT.md#q9忘了用户密码怎么重置)。
 
 服务拓扑：
 
