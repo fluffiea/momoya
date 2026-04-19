@@ -18,6 +18,7 @@ dist-ssr
 # SSL 证书（**永远**不要提交私钥到 git）
 deploy/certs/*
 !deploy/certs/.gitkeep
+!deploy/certs/README.md
 
 # 本地上传头像（保留目录结构）
 apps/api/uploads/avatars/*

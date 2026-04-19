@@ -1,305 +1,269 @@
 # Momoya
 
-pnpm monorepo：**`apps/web`**（Vite + React + React Router）、**`apps/api`**（Express + MongoDB 会话）、**`packages/shared`**（共享类型）。本地开发时前端通过 Vite 把 `/api` 代理到本机 API。
+一个为两个人定制的小型 Web 应用。pnpm monorepo：
 
-文档覆盖：**Docker 部署（推荐）**、**裸金属部署**、**本地开发**、**构建产物**、**环境变量**、**Pages 与跨域注意点**。
-
-> 🚀 **想直接上线？** 完整部署手册在 **[DEPLOYMENT.md](./DEPLOYMENT.md)**——从空服务器到上线、备份、灾备、故障排查，按顺序复制粘贴即可。
+| 包 | 技术栈 | 作用 |
+|---|---|---|
+| `apps/web` | Vite + React 19 + React Router 7 + Tailwind CSS 4 | 前端 SPA |
+| `apps/api` | Express 4 + Mongoose + connect-mongo + sharp + multer | REST API + SSE + 图片处理 |
+| `packages/shared` | TypeScript | 前后端共享的类型与 DTO |
 
 ---
 
-## Docker 部署（推荐）
+## 我要做什么？
 
-完整的"从零到上线"操作手册见 **[DEPLOYMENT.md](./DEPLOYMENT.md)**——包含服务器初始化、HTTPS、备份、灾备、故障排查全流程，按顺序复制粘贴即可。
+| 目标 | 看哪份文档 |
+|---|---|
+| 🛠 **本地开发** | 本文档 [→ §本地开发](#本地开发) |
+| 🚀 **第一次部署上线**（空服务器 → 跑起来） | **[DEPLOYMENT.md](./DEPLOYMENT.md)** §0 → §4 |
+| 🔄 **日常更新代码到服务器**（已上线，要发新版本） | **[DEPLOYMENT.md §8.1](./DEPLOYMENT.md#81-发布新版本标准流程)** |
+| 🔐 **配 HTTPS 证书** | **[DEPLOYMENT.md §3](./DEPLOYMENT.md#3-配置-https必做)** |
+| 💾 **备份 / 灾备 / 迁服务器** | **[DEPLOYMENT.md §6 / §7](./DEPLOYMENT.md#6-备份)** |
+| 🩹 **线上出问题排查** | **[DEPLOYMENT.md §10 故障 FAQ](./DEPLOYMENT.md#10-故障排查-faq)** |
 
-简版 4 步速览：
+---
+
+## 架构概览
+
+### 生产部署拓扑（Docker，三容器）
+
+```
+                ┌─────────────────────────────────────────────┐
+浏览器  ──HTTPS─►│  web 容器 (nginx:1.27-alpine)               │
+                │   listen 80  → 301 跳转到 https              │
+                │   listen 443 → 终止 TLS（deploy/certs/*.crt） │
+                │     ├── /          静态前端 (SPA fallback)    │
+                │     └── /api/* ──► proxy_pass api:4000        │
+                └──────────────────────┬──────────────────────┘
+                                       │ docker 内网
+                              ┌────────▼────────┐
+                              │  api 容器        │
+                              │  Node 20 + sharp │
+                              │  uploads volume  │
+                              └────────┬────────┘
+                                       │ mongodb://mongo:27017
+                              ┌────────▼────────┐
+                              │  mongo 容器      │
+                              │  mongo:7         │
+                              │  data volume     │
+                              └─────────────────┘
+```
+
+要点：
+
+- **同源部署**：浏览器只访问 `https://域名`，前端走相对路径 `/api`，由 nginx 反代到 api 容器，**没有 CORS、没有跨域 cookie 问题**。
+- **mongo 与 api 不暴露宿主端口**，仅在 docker 内网可达。
+- **持久化**：两个 named volume `momoya_mongo_data`、`momoya_uploads`（实际 docker 名字会带项目前缀 `momoya_`）。
+- **HTTPS 由 web 容器自己处理**，证书文件挂在 `deploy/certs/`，不依赖 Caddy / Cloudflare 这类外部反代。
+- **session 存 mongo**（`connect-mongo`），api 容器重启**不会**让用户掉线。
+- **api 容器有 gosu entrypoint**，启动前自动 chown uploads volume，避免 named volume 默认归 root 导致的写入失败。
+
+### 关键技术决策（一句话原因）
+
+| 选择 | 原因 |
+|---|---|
+| sharp 在 debian-slim 上跑（不是 alpine） | 官方预编译二进制只支持 glibc，alpine 用 musl 要源码编译 |
+| `pnpm deploy` 单独导出 api | 让 runtime 镜像只装 api 一个包的依赖，不带整个 workspace |
+| connect-mongo 存 session | 14 天滚动续期；api 容器重启 / 滚动发布不掉线 |
+| nginx `proxy_buffering off` 在 `/api/` | SSE 实时事件需要立即推送，不能被缓冲 |
+| 头像 sharp 处理（512×512 webp） | 用户上传任意比例图，统一裁正方形避免黑边 |
+| 日常列表 cursor 分页 | 避免一次性加载所有日常导致前端崩溃 |
+
+---
+
+## 仓库内的关键文件
+
+| 文件 | 作用 |
+|---|---|
+| `Dockerfile.api` | API 多阶段构建：pnpm install + tsc → pnpm deploy → 最小 runtime（gosu + nodejs:1001） |
+| `Dockerfile.web` | Web 多阶段构建：Vite build → nginx:alpine 静态托管 |
+| `deploy/nginx.conf` | 80→443 跳转、443 SSL 终止、SPA fallback、`/api` 反代、SSE 不缓冲 |
+| `deploy/api-entrypoint.sh` | api 容器启动前 chown uploads，再用 gosu 降权到 nodejs |
+| `deploy/certs/.gitkeep` | 证书目录占位，真证书 `cert.crt` / `cert.key` 由 `.gitignore` 排除 |
+| `docker-compose.prod.yml` | 生产编排：mongo + api + web，含 80/443 端口映射与卷挂载 |
+| `docker-compose.yml` | **仅本地开发**：只起 mongo |
+| `.env.production.example` | 生产密钥模板（`SESSION_SECRET`、`PROFILE_SECRET_KEY`） |
+| `.env.example` | 本地开发环境变量模板 |
+| `.dockerignore` | 排除 node_modules / dist / 上传目录，加速构建 |
+| `apps/api/scripts/seed.ts` | 灌入 jiangjiang / mengmeng 两个账号 + 默认日常条目 |
+
+---
+
+## 本地开发
+
+### 前置
+
+- **Node.js** 20+（CI 用 24，本地建议 20+ 即可）
+- **pnpm** 10.30.1（与 `package.json` 中的 `packageManager` 一致；用 `corepack enable` 自动切换）
+- **Docker Desktop**（用来本地起 mongo；不想装也可自备 mongo 实例）
+
+### 1. 起 MongoDB
+
+仓库根目录：
+
+```powershell
+docker compose up -d
+```
+
+会用根目录的 `docker-compose.yml` 起一个 mongo 容器，监听 `localhost:27017`，数据存在 named volume `momoya_mongo_data`。
+
+### 2. 写本地 `.env`
+
+复制根目录 `.env.example` → `apps/api/.env`（**推荐**，与 api 进程放一起）：
+
+```powershell
+copy .env.example apps\api\.env
+```
+
+至少填好：
+
+| 变量 | 本地推荐值 |
+|---|---|
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017/momoya` |
+| `SESSION_SECRET` | 任意长字符串（生产必须换强随机串） |
+| `PROFILE_SECRET_KEY` | 留空（本地明文存库即可；生产**必填**且**永不可换**） |
+| `PORT` | `4000` |
+| `SEED_PASSWORD_JIANGJIANG` | 任意值，仅 `pnpm seed` 时用到 |
+| `SEED_PASSWORD_MENGMENG` | 同上 |
+
+> `apps/api/src/loadEnv.ts` 会先读 `apps/api/.env`，再读根目录 `.env`，后者会覆盖前者的同名变量。
+
+### 3. 装依赖
+
+```powershell
+pnpm install
+```
+
+### 4. 灌种子数据（首次或想重置时）
+
+确保 mongo 已起、`SEED_PASSWORD_*` 已填：
+
+```powershell
+pnpm seed
+```
+
+会创建 `jiangjiang` / `mengmeng` 两个账号 + 一条默认日常。**已存在的用户会跳过、不覆盖密码**。
+
+### 5. 启动 dev server
+
+```powershell
+pnpm dev
+```
+
+| 服务 | 地址 |
+|---|---|
+| 前端（Vite） | <http://localhost:5173>（host 0.0.0.0，局域网可访问） |
+| API（Express，tsx watch） | <http://127.0.0.1:4000> |
+
+Vite 配置里把 `/api/*` 代理到 `127.0.0.1:4000`，所以前端代码写相对路径就行（参考 `apps/web/vite.config.ts`）。
+
+**单独启动**：
+
+```powershell
+pnpm dev:web   # 仅前端
+pnpm dev:api   # 仅 API
+```
+
+### 6. 检查代码
+
+```powershell
+pnpm lint
+pnpm typecheck
+```
+
+---
+
+## 根目录脚本一览
+
+| 脚本 | 等价于 | 用途 |
+|---|---|---|
+| `pnpm dev` | concurrently 起 web + api | 日常开发 |
+| `pnpm dev:web` / `pnpm dev:api` | 单独起 | 调试单端 |
+| `pnpm build` | `pnpm -r run build` | 产出 `apps/web/dist`、`apps/api/dist` |
+| `pnpm lint` | `pnpm -r run lint` | ESLint 9 |
+| `pnpm typecheck` | `pnpm -r run typecheck` | tsc --noEmit |
+| `pnpm seed` | `pnpm --filter @momoya/api seed` | 灌种子数据 |
+| `pnpm preview` | `vite preview` | 本地查看 `vite build` 产物 |
+| `pnpm cm` | `git add . && pnpm commit`（commitizen） | 交互式生成 conventional commit |
+
+---
+
+## 上线 / 发布
+
+**完整流程在 [DEPLOYMENT.md](./DEPLOYMENT.md)**。这里只放最少必要的速览。
+
+### 第一次部署（一次性，4 步）
 
 ```bash
-# 1) 在服务器上拉代码
+# 1) 服务器上拉代码
 git clone <仓库地址> /opt/momoya && cd /opt/momoya
 
 # 2) 生成密钥并软链为 .env（让 docker compose 自动读取）
 cat > .env.production <<EOF
 SESSION_SECRET=$(openssl rand -hex 32)
 PROFILE_SECRET_KEY=$(openssl rand -hex 32)
-WEB_PORT=8080
 EOF
 chmod 600 .env.production
 ln -s .env.production .env
 
-# 3) 启动
+# 3) 把 SSL 证书放到 deploy/certs/cert.crt 和 cert.key（详见 DEPLOYMENT §3）
+
+# 4) 起服务
 docker compose -f docker-compose.prod.yml up -d --build
 
-# 4) 灌入两个用户（jiangjiang / mengmeng）—— 密码由你自己定，下面两个占位符替换为真实密码
+# 5) 灌入种子账号（密码自己定，下面替换占位符）
 docker compose -f docker-compose.prod.yml exec \
-  -e SEED_PASSWORD_JIANGJIANG=<你想要的密码> \
-  -e SEED_PASSWORD_MENGMENG=<你想要的密码> \
+  -e SEED_PASSWORD_JIANGJIANG=<你的密码> \
+  -e SEED_PASSWORD_MENGMENG=<你的密码> \
   api node dist/scripts/seed.js
 ```
 
-> 项目**没有"默认密码"**——`jiangjiang` 和 `mengmeng` 两个账号是 seed 命令现场创建的，密码就是你在第 4 步环境变量里填的那个值。
+> ⚠️ **`PROFILE_SECRET_KEY` 一旦上线永远不要换** —— 它加密了用户昵称和简介，换了那两个字段全部解不出来。把整个 `.env.production` 备份到密码管理器。
 >
-> 如果第 4 步报 `用户已存在`（比如你跑过一次了），密码不会被覆盖。要改密码看 [DEPLOYMENT.md §10.9](./DEPLOYMENT.md#q9忘了用户密码怎么重置)。
+> ⚠️ **必须配 HTTPS** —— session cookie 在生产是 `secure: true`，没 HTTPS 浏览器不发 cookie，登录会直接挂。
 
-服务拓扑：
+### 日常发布新版本
 
+```bash
+# 本地：
+git add <files>
+git commit -m "feat(scope): xxx"
+git push
+
+# 服务器：
+cd /opt/momoya
+git pull
+docker compose -f docker-compose.prod.yml up -d --build api web
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=30 api
 ```
-浏览器 ─► nginx (web 容器, ${WEB_PORT:-8080}) ─┬─► / 静态前端
-                                                └─► /api/* → api 容器:4000 → mongo 容器:27017
-```
 
-- mongo / api **不映射宿主端口**，仅内网可达
-- uploads 与 mongo data 各挂 named volume 持久化
-- 前端走相对路径 `/api`，同源 cookie，无需 CORS
-
-仓库里已经准备好的文件：
-
-| 文件 | 作用 |
-|------|------|
-| `Dockerfile.api` | API 多阶段构建（pnpm deploy + sharp 预编译） |
-| `Dockerfile.web` | Vite 构建 → nginx:alpine 托管 |
-| `deploy/nginx.conf` | SPA fallback + `/api` 反代 + SSE 不缓冲 |
-| `docker-compose.prod.yml` | 生产编排：mongo + api + web |
-| `.env.production.example` | 密钥模板 |
-| `.dockerignore` | 减小构建上下文 |
-
-> ⚠️ **`PROFILE_SECRET_KEY` 一旦上线永远不要换**（数据库里加密昵称/简介的密钥，换了数据全废）。
-> ⚠️ **必须配 HTTPS**——session cookie 是 `secure: true`，没 HTTPS 登录直接失败。详见 [DEPLOYMENT.md §3](./DEPLOYMENT.md#3-配置-https必做)。
+> 详细的"按改动文件判断重建范围 / 验证清单 / 回滚"见 **[DEPLOYMENT.md §8.1](./DEPLOYMENT.md#81-发布新版本标准流程)**。
+>
+> ✅ session 存在 mongo 里，api 容器重启 / 重建**不会**让用户掉线，**不需要重新登录**。
 
 ---
 
-## 裸金属部署（不用 Docker，可选）
+## 关于 GitHub Pages CI
 
-目标：用户只访问 **`https://你的域名`**；Nginx 提供静态前端，并把 **`/api` 与 `/api/static`** 转到本机 Node API。**构建前端时不要设置 `VITE_API_BASE_URL`**（或留空），这样浏览器里请求仍是同源 `/api/...`，无需 CORS，会话 Cookie 也按当前代码即可工作。
+仓库里有 `.github/workflows/deploy.yml`，会在 `main` 分支推送时把 `apps/web/dist` 部署到 GitHub Pages。
 
-### 0. 服务器上要有
+⚠️ **目前这个 CI 实际上没在用**：
 
-- **Node.js** 20+、**pnpm**、**git**
-- **MongoDB**：本机用仓库自带 **`docker compose up -d`**，或用云厂商托管 Mongo（把 `MONGODB_URI` 写进 `.env`）
-- **Nginx**（或 Caddy 等同类反代）+ **TLS 证书**（Let’s Encrypt / 云证书均可）
-
-### 1. 拉代码与安装
-
-```bash
-git clone <你的仓库地址> momoya && cd momoya
-pnpm install --frozen-lockfile
-```
-
-### 2. 配置 `apps/api/.env`
-
-从 `.env.example` 复制为 **`apps/api/.env`**，至少填写生产必填项（见上文表格）：`MONGODB_URI`、`SESSION_SECRET`、`PROFILE_SECRET_KEY`、`PORT`（默认 4000 即可）。**不要**在构建前端时设置 `VITE_API_BASE_URL`（同域方案）。
-
-首次需要演示账号时在本机执行一次（需已配 `SEED_PASSWORD_*`）：
-
-```bash
-pnpm seed
-```
-
-### 3. 构建
-
-```bash
-pnpm build
-```
-
-得到 **`apps/web/dist`** 与 **`apps/api/dist`**。
-
-### 4. 常驻运行 API
-
-任选其一，核心是 **`NODE_ENV=production`** 且工作目录能找到 **`apps/api/.env`**（或根目录 `.env`）：
-
-```bash
-cd /path/to/momoya/apps/api
-NODE_ENV=production pnpm start
-```
-
-生产环境建议用 **systemd** 或 **pm2** 守护进程，并保证 **`uploads/avatars`** 与 Mongo 数据一样做持久化（同机目录即可，定期备份）。
-
-### 5. Nginx（示例思路）
-
-- `root` 指向仓库里的 **`apps/web/dist`**  
-- `location /`：SPA 需 **`try_files $uri $uri/ /index.html;`**  
-- `location /api/`：`proxy_pass http://127.0.0.1:4000;`（与 `PORT` 一致），保留 `Host`、`X-Forwarded-Proto` 等常用头，便于 `trust proxy` 与 HTTPS 判断  
-
-证书配在 Nginx 上终止 TLS 即可；**对外只暴露 443**（和 80 做 ACME 跳转），API 端口不必公网开放。
-
-### 6. 验收
-
-浏览器打开 `https://你的域名` → 注册/登录 → 发一条日常、上传头像；确认 **`/api/static/avatars/`** 图片可打开。
+- Momoya 是有状态应用，需要 API + MongoDB，纯静态托管的 Pages 上**前端无法登录**（API 请求会全 404）。
+- 如果你不需要它，可以删掉 `.github/workflows/deploy.yml`，避免每次 push main 都跑一次没意义的部署。
+- 如果将来想用 Pages 当备用静态镜像 + API 跑在另一个域名，需要：
+  1. 构建前端时设 `VITE_API_BASE_URL=https://api.example.com`
+  2. API 端开 CORS 允许 Pages 域名 + cookie 设 `SameSite=None; Secure`
+  3. 当前 API 没内置 CORS 中间件，需要自己加。
 
 ---
 
-## 本地开发部署
+## 安全提示
 
-### 前置条件
-
-- **Node.js**（建议 20+；CI 使用 Node 24）
-- **pnpm**（建议 9+，与 lockfile 一致）
-- **Docker Desktop**（用于本地 MongoDB，可选：你也可自备任意可连的 `MONGODB_URI`）
-
-### 1. 启动 MongoDB
-
-仓库根目录：
-
-```bash
-docker compose up -d
-```
-
-默认暴露 `localhost:27017`，数据卷名 `momoya_mongo_data`。详见根目录 `docker-compose.yml`。
-
-### 2. 环境变量
-
-复制根目录 **`.env.example`**，在以下**任一位置**保存为 `.env`（API 启动时会**依次加载**两处，后加载的会覆盖先加载的同名变量）：
-
-1. **`apps/api/.env`**（推荐，与 API 进程放一起）  
-2. **仓库根目录 `.env`**
-
-`apps/api/src/loadEnv.ts` 会先读 `apps/api/.env`，再读根目录 `.env`。
-
-至少配置（与 `.env.example` 一致）：
-
-| 变量 | 说明 |
-|------|------|
-| `MONGODB_URI` | 默认 `mongodb://127.0.0.1:27017/momoya` |
-| `SESSION_SECRET` | 会话签名密钥；**生产不可使用默认值** |
-| `PROFILE_SECRET_KEY` | 生产必填，用于加密资料里的显示名与简介（AES-256-GCM）；本地可空（明文存库，仍兼容历史明文） |
-| `PORT` | API 端口，默认 `4000` |
-| `SEED_PASSWORD_JIANGJIANG` / `SEED_PASSWORD_MENGMENG` | 仅 **`pnpm seed`** 使用，首次初始化两个账号 |
-
-本地前端 **不需要** 设置 `VITE_API_BASE_URL`（留空即可走 Vite 代理）。
-
-**安全提示**：生产环境浏览器与 API 之间应走 **HTTPS**（由反向代理或托管平台终止 TLS）。生产下 API 会启用 **HSTS**（`helmet`）。登录密码在库内为 **bcrypt** 哈希。头像文件落在 API 机器目录 **`apps/api/uploads/avatars/`**，经 **`/api/static/avatars/`** 对外提供。
-
-### 3. 安装依赖
-
-在**仓库根目录**：
-
-```bash
-pnpm install
-```
-
-### 4. 首次初始化数据（可选）
-
-需 MongoDB 已可连，且 `.env` 中已配置两个 `SEED_PASSWORD_*`：
-
-```bash
-pnpm seed
-```
-
-### 5. 启动开发服务
-
-根目录一条命令同时起前端 + API：
-
-```bash
-pnpm dev
-```
-
-| 服务 | 地址 |
-|------|------|
-| 前端（Vite） | <http://localhost:5173>（`host: 0.0.0.0`，局域网可访问） |
-| API（Express） | `http://127.0.0.1:4000`（默认 `PORT`） |
-
-Vite 将 **`/api` 代理到 `http://127.0.0.1:4000`**（见 `apps/web/vite.config.ts`），前端请求仍写相对路径 `/api/...` 即可。
-
-**单独启动**：
-
-```bash
-pnpm dev:web   # 仅前端
-pnpm dev:api   # 仅 API（tsx watch）
-```
-
----
-
-## 生产 / 预发布构建
-
-### 全仓构建
-
-在仓库根目录：
-
-```bash
-pnpm run lint
-pnpm run typecheck
-pnpm build
-```
-
-- **`@momoya/web`**：`apps/web/dist`（静态资源，可部署到任意静态托管或 CDN）  
-- **`@momoya/api`**：`apps/api/dist`（编译后的 `src/**/*.ts` → `dist/**/*.js`）  
-- **`@momoya/shared`**：随 web/api 构建被 workspace 引用，无需单独对外部署
-
-### 前端生产环境变量（构建时注入）
-
-前端请求 API 的基地址在 **构建时** 通过 **`VITE_API_BASE_URL`** 决定（见 `apps/web/src/lib/api.ts`）：
-
-- **与 API 同域反代**（推荐）：例如站点 `https://example.com`，Nginx 把 `https://example.com/api` 转到 Node，则构建时 **可不设** 或设为空，由页面与 API 同源，**Cookie 会话（`credentials: 'include'`）最省事**。若静态站与 API 不同路径，只要浏览器最终访问的 HTML 与 `/api` 同源即可。  
-- **前端与 API 不同源**：构建前设置 **`VITE_API_BASE_URL=https://api.example.com`**（**无尾斜杠**）。此时必须在 API 侧配置 **CORS**（允许前端 `Origin`、`Access-Control-Allow-Credentials: true` 等），并把会话 Cookie 设为 **`SameSite=None; Secure`** 等，否则浏览器不会带登录 Cookie。**当前仓库 API 未内置 CORS 中间件**，跨域部署需要自行加 CORS 或优先采用**同域反代**。
-
-示例（构建带独立 API 域名）：
-
-```bash
-cd apps/web
-VITE_API_BASE_URL=https://api.example.com pnpm run build
-```
-
-或在 CI / Docker build 阶段注入同名环境变量后再执行 `pnpm build` / `pnpm --filter @momoya/web build`。
-
-### 运行生产 API
-
-1. 构建：`pnpm --filter @momoya/api build`（或根目录 `pnpm build`）  
-2. 设置 **`NODE_ENV=production`**，并保证 `.env` 中 **`SESSION_SECRET`**、**`PROFILE_SECRET_KEY`** 已配置（否则进程会退出，见 `apps/api/src/index.ts`）。  
-3. 启动：
-
-```bash
-cd apps/api
-NODE_ENV=production pnpm start
-# 等价：node dist/src/index.js
-```
-
-需长期可用的 **MongoDB**；**头像目录** `apps/api/uploads/avatars` 需持久化（挂载卷或同步备份），否则换机/重装会丢文件。
-
-监听地址当前为 `app.listen(PORT)` 默认行为（本机全接口）；若只对内网开放，可配合防火墙或反代。
-
-### 静态前端预览（本地 smoke）
-
-```bash
-pnpm preview
-```
-
-等价于 `pnpm --filter @momoya/web preview`，用于本地查看 `vite build` 产物；**不替代**生产 Nginx / CDN 配置。
-
----
-
-## CI：GitHub Pages（仅静态前端）
-
-`.github/workflows/deploy.yml` 在 **`main`** 推送（或手动 `workflow_dispatch`）时：
-
-1. `pnpm install --frozen-lockfile`  
-2. `pnpm run lint`、`pnpm run typecheck`  
-3. `pnpm build`  
-4. 将 **`apps/web/dist`** 作为 Pages 产物部署  
-
-**注意**：Pages 只托管**静态前端**，**不包含** Node API 与 MongoDB。你需要：
-
-- 自行托管 API（云主机、容器、Serverless 等），并配置 MongoDB；  
-- 在构建 Web 时设置 **`VITE_API_BASE_URL`** 指向该 API（见上文）；或在同一域名下用反代把 `/api` 指到 API（此时可按同域方式构建）。
-
-若 API 与 Pages 域名不同且未做 CORS + Cookie 策略，登录态会失败。
-
----
-
-## 常用脚本（根目录）
-
-| 命令 | 说明 |
-|------|------|
-| `pnpm dev` | 并行启动 web + api |
-| `pnpm dev:web` / `pnpm dev:api` | 单独启动 |
-| `pnpm build` | 构建所有 workspace |
-| `pnpm lint` / `pnpm typecheck` | 全仓检查 |
-| `pnpm seed` | 初始化种子账号与示例数据（需 Mongo + 环境变量） |
-| `pnpm preview` | 本地预览 web 生产构建 |
-
----
-
-## 技术栈速览
-
-- 前端：React 19、Vite 7、Tailwind CSS 4、React Router 7  
-- 后端：Express 4、Mongoose、express-session（Mongo 存会话）、helmet、multer（头像）  
-- 包管理：pnpm workspace
+- 生产密码全部 **bcrypt 12 轮**哈希存储。
+- 资料里的昵称 / 简介在数据库内为 **AES-256-GCM 密文**（密钥 = `PROFILE_SECRET_KEY`）。
+- session cookie：`httpOnly` + `sameSite=lax` + 生产强制 `secure`。
+- 生产 API 启用了 helmet + HSTS（180 天）。
+- 头像文件落在 `apps/api/uploads/avatars/`（容器内 `/app/uploads/avatars`），由 nginx 反代到 `/api/static/avatars/` 对外提供，**带 `Cache-Control: private` 头**。
+- 上传图片：multer 限 3MB，nginx `client_max_body_size 12M`，sharp 自动裁切 + 转 WebP（头像 512×512）。
