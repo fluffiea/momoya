@@ -139,6 +139,10 @@ WEB_PORT=8080
 EOF
 
 chmod 600 .env.production            # 只有 owner 可读
+
+# 软链为 .env，让所有 docker compose 子命令都自动读取它
+# 不做这步的话，每次 exec / restart / logs 都得带 --env-file，麻烦且容易忘
+ln -s .env.production .env
 ```
 
 > ⚠️ **`PROFILE_SECRET_KEY` 一旦上线永远不要换**——它是数据库里加密昵称、简介的密钥，换了那两个字段会全部解不出来。
@@ -148,10 +152,14 @@ chmod 600 .env.production            # 只有 owner 可读
 ### 2.3 启动服务
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 首次构建大约 3–8 分钟（要下载 mongo + node + nginx 镜像，并构建 api/web 两个镜像）。
+
+> 之前没做 §2.2 末尾的 `ln -s .env.production .env`？那这条命令要改成：
+> `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build`
+> 同样规则适用于本文档后面**所有** `docker compose -f docker-compose.prod.yml ...` 命令。
 
 ### 2.4 检查服务状态
 
@@ -285,8 +293,8 @@ docker compose -f docker-compose.prod.yml restart api
 ### 5.4 停 / 起整个栈
 
 ```bash
-docker compose -f docker-compose.prod.yml down                                      # 停（保留数据）
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d          # 起
+docker compose -f docker-compose.prod.yml down              # 停（保留数据）
+docker compose -f docker-compose.prod.yml up -d             # 起
 ```
 
 ### 5.5 进容器排查
@@ -423,7 +431,7 @@ scp ~/backups/momoya/uploads-XXXX.tgz deploy@<新服务器IP>:/tmp/
 cd /opt/momoya
 
 # 先创建 volume（不启动服务）
-docker compose -f docker-compose.prod.yml --env-file .env.production create
+docker compose -f docker-compose.prod.yml create
 
 # 还原 mongo
 docker run --rm \
@@ -437,8 +445,9 @@ docker run --rm \
   -v /tmp:/backup \
   alpine sh -c "cd /data && tar xzf /backup/uploads-XXXX.tgz"
 
-# 启动
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# 软链 .env（同 §2.2 末尾），并启动
+ln -s .env.production .env
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### 7.5 域名切换
@@ -454,7 +463,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ```bash
 cd /opt/momoya
 git pull
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 旧版本镜像会被自动停掉、新镜像启动，**几秒钟服务不可用**（如果在意零停机，需要上更复杂的蓝绿/滚动方案，目前规模无必要）。
@@ -465,7 +474,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 cd /opt/momoya
 git log --oneline -5                  # 找到上一个稳定 commit 的 hash
 git checkout <commit-hash>
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 回滚不会丢数据库数据（mongo volume 与代码版本无关）。
@@ -513,7 +522,7 @@ sudo systemctl enable --now fail2ban
 
 ```bash
 sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" /opt/momoya/.env.production
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 `PROFILE_SECRET_KEY` **永远不要换**。
@@ -573,7 +582,7 @@ Error: Could not load the "sharp" module using the linux-x64 runtime
 
 ```bash
 docker compose -f docker-compose.prod.yml build --no-cache api
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### Q5：上传图片报 413 Request Entity Too Large
@@ -663,14 +672,16 @@ docker compose -f docker-compose.prod.yml exec -it mongo mongosh momoya --eval '
 
 ## 附：常用命令速查
 
+> 前提：已按 §2.2 末尾做过 `ln -s .env.production .env`，否则下面所有命令都要加 `--env-file .env.production`。
+
 | 操作 | 命令 |
 |------|------|
-| 启动 | `docker compose -f docker-compose.prod.yml --env-file .env.production up -d` |
+| 启动 | `docker compose -f docker-compose.prod.yml up -d` |
 | 停止 | `docker compose -f docker-compose.prod.yml down` |
 | 状态 | `docker compose -f docker-compose.prod.yml ps` |
 | 日志 | `docker compose -f docker-compose.prod.yml logs -f api` |
 | 重启 api | `docker compose -f docker-compose.prod.yml restart api` |
-| 发新版本 | `git pull && docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build` |
+| 发新版本 | `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
 | 进容器 | `docker compose -f docker-compose.prod.yml exec -it api sh` |
 | 手动备份 | `bash /opt/momoya/scripts/backup.sh` |
 

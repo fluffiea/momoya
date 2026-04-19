@@ -18,16 +18,17 @@ pnpm monorepo：**`apps/web`**（Vite + React + React Router）、**`apps/api`**
 # 1) 在服务器上拉代码
 git clone <仓库地址> /opt/momoya && cd /opt/momoya
 
-# 2) 生成密钥
+# 2) 生成密钥并软链为 .env（让 docker compose 自动读取）
 cat > .env.production <<EOF
 SESSION_SECRET=$(openssl rand -hex 32)
 PROFILE_SECRET_KEY=$(openssl rand -hex 32)
 WEB_PORT=8080
 EOF
 chmod 600 .env.production
+ln -s .env.production .env
 
 # 3) 启动
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 
 # 4) 灌入两个用户（jiangjiang / mengmeng）—— 密码由你自己定，下面两个占位符替换为真实密码
 docker compose -f docker-compose.prod.yml exec \

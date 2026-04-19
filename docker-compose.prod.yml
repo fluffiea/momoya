@@ -3,7 +3,8 @@
 #
 # 用法：
 #   1) 复制 .env.production.example -> .env.production，按需填密钥
-#   2) docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#   2) ln -s .env.production .env       # 让 docker compose 默认能读到密钥
+#   3) docker compose -f docker-compose.prod.yml up -d --build
 #
 # 服务拓扑：
 #   mongo (内网) ──┐
@@ -42,6 +43,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/momoya
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET 必填}
       PROFILE_SECRET_KEY: ${PROFILE_SECRET_KEY:?PROFILE_SECRET_KEY 必填}
+      # 显式指定上传目录，避免代码内相对路径推导出错
+      UPLOADS_DIR: /app/uploads
     volumes:
       # 用户上传文件持久化（Dockerfile 里 chown 给 nodejs:1001）
       - momoya_uploads:/app/uploads
