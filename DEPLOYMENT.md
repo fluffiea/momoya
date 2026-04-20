@@ -2,7 +2,9 @@
 
 > **对象**：单台 Linux 服务器（Ubuntu 22.04+ / Debian 12+ 推荐）
 > **目标**：从空机到上线、稳定运行、可备份、可灾备
-> **方案**：Docker Compose（mongo + api + web 三容器），web 容器内 nginx 直接终止 HTTPS
+> **方案**：Docker Compose（mongo + api + web 三容器），web 容器内 nginx 直接终止 HTTPS；**api/web 镜像默认从 GHCR 拉取**（由 GitHub Actions 构建推送），与仓库默认分支保持一致。
+>
+> 若你检出的是**历史 tag**（例如旧版 v0.0.1），请以该 tag 下的 `docker-compose.prod.yml`、`DEPLOYMENT.md` 为准，步骤可能与当前主分支不同。
 >
 > 所有命令按顺序复制粘贴即可，遇到 `<尖括号>` 包裹的占位符替换成你自己的值。
 
@@ -159,6 +161,8 @@ git clone <你的仓库地址> .          # 注意末尾的 . （拉到当前目
 cat > .env.production <<EOF
 SESSION_SECRET=$(openssl rand -hex 32)
 PROFILE_SECRET_KEY=$(openssl rand -hex 32)
+MOMOYA_IMAGE_PREFIX=ghcr.io/<你的 GitHub 用户名小写>
+MOMOYA_IMAGE_TAG=latest
 EOF
 
 chmod 600 .env.production            # 只有 owner 可读
@@ -167,6 +171,8 @@ chmod 600 .env.production            # 只有 owner 可读
 # 不做这步的话，每次 exec / restart / logs 都得带 --env-file，麻烦且容易忘
 ln -s .env.production .env
 ```
+
+`MOMOYA_IMAGE_PREFIX` 必须与 GitHub Actions 推到 GHCR 的名称一致：一般为 `ghcr.io/<GitHub 用户名全小写>`（与仓库 **Packages** 里 `momoya-api` / `momoya-web` 的命名空间一致）。`MOMOYA_IMAGE_TAG` 一般用 `latest`；需要钉死某一版时再改成该次构建的完整 commit SHA（见 §8.2）。
 
 > ⚠️ **`PROFILE_SECRET_KEY` 一旦上线永远不要换** —— 它是数据库里加密昵称、简介的密钥（AES-256-GCM），换了那两个字段会**全部解不出来**。
 >
@@ -197,15 +203,39 @@ chmod 600 deploy/certs/cert.key
 
 ### 2.4 启动服务
 
+**推荐（与 §8 日常发布一致）**：api / web 镜像由 GitHub Actions 构建并推送到 GHCR，服务器只负责 **拉镜像 + 起容器**，不在生产机跑 `pnpm build`。
+
+1. **至少推送过一次** `main`（或 `master`）分支，让 [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) 跑完，GHCR 里已有 `momoya-api` / `momoya-web` 的 `latest` 标签。
+2. 在服务器执行：
+
+```bash
+docker compose -f docker-compose.prod.yml pull api web
+docker compose -f docker-compose.prod.yml up -d
+```
+
+首次拉取大约 2–6 分钟（下载 mongo 官方镜像 + 两个业务镜像；体积取决于网络）。
+
+**若暂时还没有可用的 GHCR 镜像**（例如 CI 尚未跑通），可以在服务器用 compose 里自带的 `build` 段先起一次（会占满 CPU 几分钟）：
+
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-首次构建大约 3–8 分钟（下载 mongo + node + nginx 镜像，构建 api/web 两个镜像）。
+之后仍建议以 GHCR 为主，避免长期依赖服务器现场编译。
 
 > 之前没做 §2.2 末尾的 `ln -s .env.production .env`？那命令要改成：
-> `docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build`
+> `docker compose -f docker-compose.prod.yml --env-file .env.production pull api web` 与 `... up -d`
 > 同样规则适用于本文档后面**所有** `docker compose -f docker-compose.prod.yml ...` 命令。
+
+#### 私有 GHCR 包：先登录再 pull
+
+若仓库或 Package 为**私有**，在服务器上对 `deploy` 用户执行一次（Token 需要 `read:packages`，经典 PAT 或 Fine-grained 均可）：
+
+```bash
+echo '<你的 GitHub Token>' | docker login ghcr.io -u <GitHub 用户名> --password-stdin
+```
+
+公开仓库且 Package 也是公开的，一般**无需登录**即可 `docker pull`。
 
 ### 2.5 检查服务状态
 
@@ -575,8 +605,9 @@ docker run --rm \
   -v /tmp:/backup \
   alpine sh -c "cd /data && tar xzf /backup/uploads-XXXX.tgz"
 
-# 6) 启动
-docker compose -f docker-compose.prod.yml up -d --build
+# 6) 启动（.env.production 里需已有 MOMOYA_IMAGE_*，与线上一致）
+docker compose -f docker-compose.prod.yml pull api web
+docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 ```
 
@@ -588,26 +619,36 @@ docker compose -f docker-compose.prod.yml ps
 
 ## 8. 升级与回滚
 
-### 8.1 发布新版本（标准流程）
+### 8.0 换镜像时，数据还在吗？
 
-每次本地改完代码，从提交到服务器生效的**完整流程**如下。整个过程大约 **2～5 分钟**，期间服务有 **几秒钟到 1 分钟** 的不可用窗口。
+**在。** 用户数据在两个 **Docker named volume** 里，与业务镜像、容器可写层无关：
 
-#### 8.1.1 本地侧（Windows / 任何开发机）
+| Volume（名称会因 compose 项目前缀略有不同） | 内容 |
+|---|---|
+| `momoya_mongo_data` | MongoDB 全库（账号、日常、评论、session 等） |
+| `momoya_uploads` | 头像与日常图片文件 |
+
+日常升级只会 **用新镜像替换 api/web 容器**，只要你不执行带 **`-v` / `--volumes`** 的删除命令，上述卷会**原样保留**。也不影响 `.env.production` 里的内容（除非你主动改密钥文件）。
+
+**不要做**：`docker compose down -v`、`docker volume rm ...`、`docker system prune -a --volumes`（会删卷，数据库与上传会没）。
+
+**与本次发布方式的关系**：从「服务器 `git pull` + `docker compose --build`」改为「拉 GHCR 预构建镜像」，**只改变镜像从哪来**，**不改变 volume 挂载方式**，因此**不是**数据迁移，也不会清空已有数据。
+
+---
+
+### 8.1 发布新版本（推荐：GitHub Actions → GHCR）
+
+流程：**本地 push → CI 构建并推送镜像 → 服务器拉镜像并重启容器**。服务器上**不再**需要跑 `pnpm install` / `pnpm build`（除非应急，见 §8.5）。
+
+整个过程大约 **1～4 分钟**（视 CI 与网络而定），服务可能有 **数秒～约 1 分钟** 的短暂不可用窗口。
+
+#### 8.1.1 本地侧（Windows / Mac / Linux）
 
 ```powershell
-# 1) 进项目根目录
-cd D:\dev\momoya
-
-# 2) 看一眼改了哪些文件，确认没把临时垃圾带上
+cd <你的项目根目录>
 git status
-
-# 3) 选择性 add（推荐显式列出要提交的文件，别用 git add .）
 git add <文件1> <文件2> ...
-
-# 4) 写清楚的 commit message
-git commit -m "fix(api): xxxxx"   # 见下方 commit message 规范
-
-# 5) 推到远端
+git commit -m "fix(api): xxxxx"
 git push
 ```
 
@@ -620,148 +661,134 @@ git push
 >
 > `scope` 一般是 `api` / `web` / `shared` / `deploy` 之一。
 
-#### 8.1.2 服务器侧（SSH 登录服务器）
+推送 `main` 或 `master` 后，打开 GitHub 仓库 → **Actions**，确认 **Publish Docker images**  workflow 已成功；再在仓库 → **Packages**（或 **ghcr.io**）里能看到 `momoya-api`、`momoya-web` 的 `latest` 与对应 commit 的 tag。
+
+#### 8.1.2 服务器侧（SSH）
+
+**方式 A（推荐）**：仓库里自带脚本，避免漏步骤：
 
 ```bash
-# 1) 进项目目录
 cd /opt/momoya
-
-# 2) 拉最新代码
-git pull
-
-# 3) 看本次改了哪些文件，决定要不要重建（见下方"判断重建范围"）
-git log --stat -1
+bash deploy/server-update.sh
 ```
 
-##### 判断重建范围（很重要，能省时间）
-
-按本次改动的文件，决定执行下面**哪一条**命令：
-
-| 改了什么 | 执行命令 | 耗时 |
-|---|---|---|
-| 仅前端代码（`apps/web/**`） | `docker compose -f docker-compose.prod.yml up -d --build web` | ~1 分钟 |
-| 仅后端代码（`apps/api/**`、`packages/shared/**`） | `docker compose -f docker-compose.prod.yml up -d --build api` | ~1～2 分钟 |
-| 前后端都改了 | `docker compose -f docker-compose.prod.yml up -d --build api web` | ~2～3 分钟 |
-| 改了 `Dockerfile.api` / `Dockerfile.web` / `package.json` / `pnpm-lock.yaml` | 同上对应服务，但**不要带缓存**：加 `--no-cache` 重新构建 | ~3～5 分钟 |
-| 改了 `nginx.conf` / `deploy/api-entrypoint.sh` | `docker compose -f docker-compose.prod.yml up -d --build <对应服务>` | ~1 分钟 |
-| 改了 `docker-compose.prod.yml` | `docker compose -f docker-compose.prod.yml up -d` | ~10 秒 |
-| 仅改了 `.env.production` | `docker compose -f docker-compose.prod.yml up -d --force-recreate api`（容器需要重读环境变量） | ~10 秒 |
-| 仅改了文档（`*.md`） | **不用做任何事**，直接结束 | 0 |
-
-> **不确定就全量重建**（最稳妥，多花 1 分钟而已）：
-> ```bash
-> docker compose -f docker-compose.prod.yml up -d --build
-> ```
-
-#### 8.1.3 验证（每次必做）
+**方式 B（手动，与脚本等价）**：
 
 ```bash
-# 1) 看服务是不是都起来了
+cd /opt/momoya
+git pull --ff-only
+docker compose -f docker-compose.prod.yml pull api web
+docker compose -f docker-compose.prod.yml up -d
+```
+
+`git pull` 仍然需要：用来同步 `docker-compose.prod.yml`、`deploy/nginx.conf`、证书路径等**仓库里的配置**；**业务代码**已在镜像里，不必靠服务器上的 `apps/` 源码来运行。
+
+##### 若本次只改了仓库里的配置（不必拉新镜像）
+
+| 改了什么 | 操作 |
+|---|---|
+| 仅 `deploy/nginx.conf` / `deploy/api-entrypoint.sh` / `Dockerfile.*` | 需要 **新镜像**：等 CI 完成后照常 `pull api web` + `up -d` |
+| 仅 `docker-compose.prod.yml`（不含镜像 tag 变更） | `docker compose -f docker-compose.prod.yml up -d` |
+| 仅 `.env.production` | `docker compose -f docker-compose.prod.yml up -d --force-recreate api`（或按需 `--force-recreate web`） |
+| 仅文档 `*.md` | 无需重启容器 |
+
+#### 8.1.3 一次性补齐：旧服务器还没有 `MOMOYA_IMAGE_*`
+
+若 `.env.production` 是早期版本、只有 `SESSION_SECRET` / `PROFILE_SECRET_KEY`，请**追加**两行（把前缀改成你的 GitHub 用户名小写，与 GHCR 上包名一致）：
+
+```bash
+nano /opt/momoya/.env.production
+# 追加：
+# MOMOYA_IMAGE_PREFIX=ghcr.io/<你的 GitHub 用户名小写>
+# MOMOYA_IMAGE_TAG=latest
+```
+
+保存后执行 §8.1.2 的 `pull` + `up`。**不要改** `SESSION_SECRET` / `PROFILE_SECRET_KEY`（除非你知道后果）。
+
+#### 8.1.4 验证（每次必做）
+
+```bash
 docker compose -f docker-compose.prod.yml ps
-
-# 2) 看 api 日志，确认没报错
 docker compose -f docker-compose.prod.yml logs --tail=30 api
-
-# 3) 看 web 日志（仅在重建了 web 的时候）
 docker compose -f docker-compose.prod.yml logs --tail=30 web
 ```
 
-期望看到：
-- `ps` 输出里 `api` / `web` / `mongo` 都是 `Up`
-- `api` 日志末尾有 `API listening on http://127.0.0.1:4000`，**没有** `Error` / `EACCES` / `ECONNREFUSED`
+浏览器硬刷新，抽测登录 / 发日常 / 传图。session 在 mongo 里，一般**无需重新登录**。
 
-然后**浏览器**：
+#### 8.1.5 万一翻车了
 
-1. 打开 `https://<你的域名>`，硬刷新（`Ctrl+Shift+R`）
-2. **不用重新登录**——session 存在 mongo 里（`connect-mongo`），api 容器重启 / 重建不会让用户掉线
-3. 跑一下 [§4 验收清单](#4-验收) 里的关键路径：发条日常 / 上传头像 / 写条评论
-
-> 万一登录被踢了，要么是你**改了** `SESSION_SECRET`（cookie 签名失效），要么是 cookie 自然过期（14 天不访问）。这不属于发布异常，重新登录即可。
-
-#### 8.1.4 万一翻车了
-
-立刻回滚（见 [§8.2](#82-回滚到上一个版本)），不要现场调试 —— 先把服务恢复，再回头慢慢查。
+立刻按 [§8.2](#82-回滚到上一个版本) 回滚，不要现场改线上数据库。
 
 ---
 
 ### 8.2 回滚到上一个版本
 
-#### 场景 A：刚 push 上去的 commit 有问题，**想撤掉这次发布**
+#### 场景 A：刚发上去的镜像有问题，**想回到上一版 GHCR 镜像**
+
+CI 为每次成功构建推送两个标签：`:latest` 与 `:<Git commit 的完整 40 位 SHA>`。在 GitHub 该次失败提交的 Actions 日志里找到**上一个成功 run** 对应的 commit，或本地 `git log` 找稳定版本的全写 SHA。
+
+在服务器：
 
 ```bash
-cd /opt/momoya
+nano /opt/momoya/.env.production
+# 设置 MOMOYA_IMAGE_TAG=<那个 40 位 SHA>，保存
 
-# 1) 看最近 5 个 commit，找上一个稳定的 hash
-git log --oneline -5
-
-# 2) 临时切到老版本（detached HEAD，不动 dev 分支）
-git checkout <上一个稳定的 commit-hash>
-
-# 3) 用老代码重建
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml pull api web
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-服务恢复后，回到本地修 bug、再走一次 §8.1，最后服务器执行：
+确认恢复后，可把 `MOMOYA_IMAGE_TAG` 改回 `latest`，等修好再发一版。
 
-```bash
-cd /opt/momoya
-git checkout dev      # 切回正常分支
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
-```
+**备选（不依赖 GHCR 标签）**：`git checkout <旧 commit>` 后执行 `docker compose -f docker-compose.prod.yml up -d --build`（compose 里仍保留 `build` 段，仅供应急；数据仍在 volume 里）。
 
-#### 场景 B：你已经在本地修好了，**想直接用新提交覆盖**
+#### 场景 B：你已在本地修好，**正常再发一版**
 
-```bash
-# 本地：照常 git commit / git push
-# 服务器：
-cd /opt/momoya
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
-```
+本地 `git push` → 等 CI 成功 → 服务器执行 §8.1.2（`MOMOYA_IMAGE_TAG=latest` 时即拉最新）。
 
 #### 兜底：mongo 数据安全吗？
 
-**安全。** 回滚只动镜像，不动 named volume（`momoya_mongo_data` / `momoya_uploads`）。
-唯一例外：如果你的代码里改了 mongo 的 schema 并写过新数据，回滚后老代码可能读不出来——这种情况要么补 migration，要么在出问题前先备份（[§6.2](#62-手动备份任何时候执行)）。
+**安全。** 回滚只替换 **api/web 镜像与容器**，不动 named volume。唯一例外：新版本写过 **不兼容的 schema** 且已有新数据，老代码读不了——需要迁移或从备份恢复（[§6.2](#62-手动备份任何时候执行)）。
 
 ---
 
 ### 8.3 清理无用镜像
 
-每次重建会留下旧镜像，**几次之后会吃掉好几 G 磁盘**。建议每次部署完顺手清一下：
+服务器上若多次 `pull`，会积累旧层，可定期：
 
 ```bash
-docker image prune -af              # 删除所有无标签 / 无容器引用的镜像
-docker builder prune -af            # 删除构建缓存（下次 build 会变慢但更干净）
+docker image prune -af
 ```
 
-> ⚠️ **不要**跑 `docker volume prune` 不加确认 —— named volume 安全，但万一手滑就麻烦了。
-> ⚠️ **不要**跑 `docker system prune -a --volumes` —— 这会删 volume，**数据库直接没了**。
+若你仍在服务器上用过 `--build`，还可 `docker builder prune -af`。**不要**对生产乱用 `docker volume prune` / `docker system prune -a --volumes`。
 
 ---
 
 ### 8.4 速查卡片
 
-把这段贴在显眼位置，下次更新照抄：
+```bash
+# === 本地 ===
+# git add <files> && git commit -m "fix(scope): xxx" && git push
+# 等 GitHub Actions「Publish Docker images」变绿
+
+# === 服务器 ===
+cd /opt/momoya && bash deploy/server-update.sh
+# 或：git pull --ff-only && docker compose -f docker-compose.prod.yml pull api web && docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+### 8.5 应急：CI 不可用、必须在服务器上现场构建
+
+`docker-compose.prod.yml` 仍为 `api` / `web` 保留了 `build` 段。仅在应急时使用：
 
 ```bash
-# === 本地（PowerShell） ===
-cd D:\dev\momoya
-git status
-git add <files...>
-git commit -m "fix(scope): xxx"
-git push
-
-# === 服务器（SSH） ===
 cd /opt/momoya
 git pull
-git log --stat -1                                                  # 看改了什么
-docker compose -f docker-compose.prod.yml up -d --build api web    # 全量重建（最稳）
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs --tail=30 api
-# 浏览器：硬刷新即可（无需重新登录，session 在 mongo），抽测一个核心功能
+docker compose -f docker-compose.prod.yml build --no-cache api   # 或 web / 两者
+docker compose -f docker-compose.prod.yml up -d
 ```
+
+构建会占用大量 CPU/内存，且与 CI 环境可能略有差异；恢复后应尽快回到 **GHCR 拉镜像** 的主流程。
 
 ---
 
@@ -1031,19 +1058,11 @@ git pull
 grep -n "^~ /api/" /opt/momoya/deploy/nginx.conf
 ```
 
-如果没有，`git pull` 后 `docker compose -f docker-compose.prod.yml up -d --build web`。
+如果没有，`git pull` 后等 CI 成功，再执行 `docker compose -f docker-compose.prod.yml pull web && docker compose -f docker-compose.prod.yml up -d web`（或 `bash deploy/server-update.sh`）。
 
 ### Q13：构建很慢 / `pnpm install` 卡在 fetching
 
-国内服务器拉 npm registry 慢。可以临时换淘宝镜像：
-
-```bash
-# 进 api 容器里看是 pnpm 还是 corepack 慢，针对性换源
-# 或在 Dockerfile.api 的 builder 阶段加：
-# RUN pnpm config set registry https://registry.npmmirror.com
-```
-
-但镜像源切换可能影响 `pnpm-lock.yaml` 的可复现性，**只在卡到不能忍时再用**。
+**日常发布**已在 GitHub Actions 里构建镜像，服务器**不再**跑 `pnpm install`。若你在 **§8.5 应急** 于服务器现场 `docker compose build`，国内机子拉 npm 可能很慢，可临时在 Dockerfile 的 builder 阶段换淘宝源（见仓库内 `Dockerfile.api` / `Dockerfile.web` 注释自行加一行 `pnpm config set registry …`），但可能影响 lockfile 可复现性，**只在应急时用**。
 
 ---
 
@@ -1060,7 +1079,7 @@ grep -n "^~ /api/" /opt/momoya/deploy/nginx.conf
 | 日志（最近 N 行） | `docker compose -f docker-compose.prod.yml logs --tail=100 api` |
 | 重启某服务 | `docker compose -f docker-compose.prod.yml restart api` |
 | 强制重建容器（环境变量更新后） | `docker compose -f docker-compose.prod.yml up -d --force-recreate api` |
-| 拉新代码 + 全量发版 | `git pull && docker compose -f docker-compose.prod.yml up -d --build` |
+| 拉新配置 + 拉镜像发版 | `bash deploy/server-update.sh` 或 `git pull --ff-only && docker compose -f docker-compose.prod.yml pull api web && docker compose -f docker-compose.prod.yml up -d` |
 | 进 api 容器 shell | `docker compose -f docker-compose.prod.yml exec -it api sh` |
 | 进 mongo shell | `docker compose -f docker-compose.prod.yml exec -it mongo mongosh momoya` |
 | 上传 SSL 证书后 reload | `docker compose -f docker-compose.prod.yml restart web` |
