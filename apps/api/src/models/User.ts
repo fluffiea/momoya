@@ -37,6 +37,8 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     /** 每次成功登录自增；与 session.authVersion 比对以实现单设备会话 */
     authSessionVersion: { type: Number, default: 0 },
+    /** 前端心跳更新时间，用于判断对方是否在线 */
+    lastActiveAt: { type: Date },
     profile: { type: profileSchema, default: () => ({}) },
   },
   { timestamps: true },

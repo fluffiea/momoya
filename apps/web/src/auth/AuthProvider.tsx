@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { UserPublic } from '@momoya/shared';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, apiPostJson } from '@/lib/api';
+import { connectDailyEvents, disconnectDailyEvents } from '@/lib/dailyEvents';
 import {
   markSessionReplacedHandled,
   resetSessionReplacedGate,
@@ -33,6 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [sessionReplacedOpen, setSessionReplacedOpen] = useState(false);
   const [sessionReplacedMessage, setSessionReplacedMessage] = useState('');
+  const userRef = useRef<UserPublic | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const refresh = useCallback(async () => {
     const next = await fetchMe();
@@ -69,6 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (username: string, password: string) => {
+      // 必须在发起登录请求**之前**关掉旧 SSE：服务端会在同一轮登录里 notifyStale，
+      // 若旧 EventSource 仍连着，会先收到 `session.replaced`，误弹「登录已失效」并把 user 清掉。
+      const hadUser = userRef.current !== null;
+      disconnectDailyEvents();
+      resetSessionReplacedGate();
       const r = await apiPostJson<{ user: UserPublic }>('/api/auth/login', {
         username,
         password,
@@ -78,12 +96,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(r.data.user);
         return { ok: true as const };
       }
+      // 已登录仍打开 /login 并输错密码时：会话未换但 SSE 已断，App 的 [user] 不变不会自动重连。
+      if (
+        hadUser &&
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible'
+      ) {
+        connectDailyEvents();
+      }
       return { ok: false as const, message: r.error };
     },
     [],
   );
 
   const logout = useCallback(async () => {
+    disconnectDailyEvents();
     await apiFetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
   }, []);

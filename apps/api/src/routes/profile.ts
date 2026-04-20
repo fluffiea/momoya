@@ -6,9 +6,11 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import sharp from 'sharp';
-import type { DailyTag } from '@momoya/shared';
+import type { DailyTag, PartnerProfileResponse } from '@momoya/shared';
+import { PRESENCE_ONLINE_WINDOW_MS, pairedPartnerUsername } from '@momoya/shared';
 import { User } from '../models/User.js';
 import { toUserPublic } from '../lib/userPublic.js';
+import { isUsernameSseConnected } from '../lib/dailyEvents.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { AVATARS_DIR } from '../paths.js';
 import { AVATAR_STATIC_PREFIX, isSafeAvatarFilename, tryDeleteAvatarFile } from '../lib/avatarFiles.js';
@@ -87,13 +89,46 @@ const avatarUpload = multer({
   },
 });
 
-profileRouter.get('/me', async (req, res) => {
-  const user = await User.findById(req.session.userId);
+profileRouter.get('/me', async (_req, res) => {
+  const user = res.locals.authUser;
   if (!user) {
     res.status(401).json({ error: '未登录' });
     return;
   }
   res.json({ user: toUserPublic(user) });
+});
+
+/** 成对账号的另一方：含简介等完整 UserPublic，以及是否在线 */
+profileRouter.get('/partner', async (_req, res) => {
+  const me = res.locals.authUser;
+  if (!me) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
+  const partnerUsername = pairedPartnerUsername(me.username);
+  if (!partnerUsername) {
+    res.status(404).json({ error: '当前账号未配对对象资料' });
+    return;
+  }
+  const partner = await User.findOne({ username: partnerUsername }).exec();
+  if (!partner) {
+    res.status(404).json({ error: '未找到对方账号' });
+    return;
+  }
+  const lastAt = partner.lastActiveAt ? new Date(partner.lastActiveAt) : null;
+  const last = lastAt && !Number.isNaN(lastAt.getTime()) ? lastAt.getTime() : 0;
+  // 同进程内若已看到 partner 的 SSE 连接直接判在线，避开 keepalive 尚未首次刷新的窗口误判；
+  // 否则用 DB `lastActiveAt` + 窗口兜底（跨进程 / 冷启动场景）。
+  const online =
+    isUsernameSseConnected(partnerUsername) ||
+    (last > 0 && Date.now() - last < PRESENCE_ONLINE_WINDOW_MS);
+  const lastActiveAtIso = lastAt && !Number.isNaN(lastAt.getTime()) ? lastAt.toISOString() : null;
+  const body: PartnerProfileResponse = {
+    user: toUserPublic(partner),
+    online,
+    lastActiveAt: lastActiveAtIso,
+  };
+  res.json(body);
 });
 
 profileRouter.patch('/me', async (req, res) => {

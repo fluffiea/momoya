@@ -91,6 +91,51 @@ export interface HomePartnersResponse {
   partners: [HomePartnerCard, HomePartnerCard];
 }
 
+/** GET /api/profile/partner：对象完整公开资料 + 是否在线（最近有心跳） */
+export interface PartnerProfileResponse {
+  user: UserPublic;
+  online: boolean;
+  /** 对方最后一次心跳的 ISO 时间；前端与 SSE 对齐本地在线计时 */
+  lastActiveAt: string | null;
+}
+
+/**
+ * REST `GET /partner` 兜底：lastActiveAt 距现在小于该值视为在线。
+ * 须大于 SSE keepalive 间隔（25s）的数倍，避免 TCP 偶发卡顿误判离线。
+ */
+export const PRESENCE_ONLINE_WINDOW_MS = 75_000;
+
+/** 成对站点：由当前登录用户名解析另一方账号；非成对则 null */
+export function pairedPartnerUsername(username: string): string | null {
+  const u = username.trim().toLowerCase();
+  if (u === 'jiangjiang') return 'mengmeng';
+  if (u === 'mengmeng') return 'jiangjiang';
+  return null;
+}
+
+/** SSE `presence`：与日常共用连接，由服务端连接开闭驱动，秒级同步 */
+export type PresenceSsePayload =
+  | { kind: 'active'; username: string; at: string }
+  | { kind: 'away'; username: string; at: string };
+
+/**
+ * SSE `sync`：新连接建立后**单播**的快照（双人在线态 + 日常时间线游标）。
+ * 用于后发设备补全视图、与 REST 列表对比后决定是否刷新。
+ */
+export interface DailySyncPresenceSlot {
+  username: string;
+  online: boolean;
+  /** ISO；无最近活跃记录时为 null */
+  lastActiveAt: string | null;
+}
+
+export interface DailySyncBootstrapPayload {
+  kind: 'bootstrap';
+  presences: DailySyncPresenceSlot[];
+  /** 全库最新一条 entry 的 `at`（ISO）；客户端可与本地已加载列表对比 */
+  latestEntryAt: string | null;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;

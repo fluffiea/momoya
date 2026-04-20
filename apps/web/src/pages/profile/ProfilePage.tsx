@@ -1,13 +1,16 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
-import type { DailyEntryKind, UserPublic } from '@momoya/shared';
+import type { DailyEntryKind, PartnerProfileResponse, UserPublic } from '@momoya/shared';
+import { pairedPartnerUsername } from '@momoya/shared';
 import { useAuth } from '@/auth/useAuth';
 import DangerConfirmModal from '@/components/ui/DangerConfirmModal';
+import Modal from '@/components/ui/Modal';
 import PageFooter from '@/components/ui/PageFooter';
 import SectionLabel from '@/components/ui/SectionLabel';
 import { UserAvatar } from '@/components/user';
-import { apiPatchJson } from '@/lib/api';
+import { apiFetch, apiPatchJson } from '@/lib/api';
+import { subscribePresence, subscribeSyncBootstrap } from '@/lib/dailyEvents';
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -111,9 +114,13 @@ const LockIcon = (
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, refresh, logout } = useAuth();
+  const partnerModalTitleId = useId();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [viewPending, setViewPending] = useState(false);
+  const [partnerPayload, setPartnerPayload] = useState<PartnerProfileResponse | null>(null);
+  const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+  const [partnerOnline, setPartnerOnline] = useState(false);
 
   const confirmLogout = useCallback(async () => {
     setLogoutPending(true);
@@ -145,10 +152,92 @@ export default function ProfilePage() {
     [user, refresh],
   );
 
+  const username = user?.username ?? null;
+
+  /**
+   * Partner 资料 + 在线态：
+   *   - REST `/api/profile/partner` 首屏兜底（也用于刷新对方的 displayName/avatar/bio）
+   *   - SSE `presence` 秒级驱动在线/离线
+   *   - SSE `sync`（重连时单播快照）同步在线态，避免"断线期间 partner 上下线"留下陈旧视图
+   *
+   * 只监听 username 变化——self profile 被编辑导致 user 引用变化时，不应重置 partner 状态。
+   */
+  useEffect(() => {
+    if (!username) {
+      setPartnerPayload(null);
+      setPartnerOnline(false);
+      return;
+    }
+    const expected = pairedPartnerUsername(username);
+    if (!expected) {
+      setPartnerPayload(null);
+      setPartnerOnline(false);
+      return;
+    }
+    const expectedLower = expected.toLowerCase();
+
+    let cancelled = false;
+    const fetchPartner = async () => {
+      const r = await apiFetch<PartnerProfileResponse>('/api/profile/partner');
+      if (cancelled) return;
+      if (r.ok) {
+        setPartnerPayload(r.data);
+        setPartnerOnline(r.data.online);
+      } else {
+        setPartnerPayload(null);
+        setPartnerOnline(false);
+      }
+    };
+    void fetchPartner();
+
+    // 回到前台时刷新对方静态资料（头像/昵称/简介可能被对方编辑过）；在线态由 SSE 覆盖，此处不是主路径
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void fetchPartner();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const unsubPresence = subscribePresence((p) => {
+      if (p.username !== expectedLower) return;
+      setPartnerOnline(p.kind === 'active');
+    });
+
+    const unsubSync = subscribeSyncBootstrap((payload) => {
+      const slot = payload.presences.find((s) => s.username === expectedLower);
+      if (!slot) return;
+      setPartnerOnline(slot.online);
+    });
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      unsubPresence();
+      unsubSync();
+    };
+  }, [username]);
+
+  // 打开详情 Modal 时补一次 REST，拿到对方刚刚改过的简介；在线态照旧由 SSE 接管，别覆盖成 REST 的陈旧值
+  useEffect(() => {
+    if (!partnerModalOpen || !username) return;
+    let cancelled = false;
+    void (async () => {
+      const r = await apiFetch<PartnerProfileResponse>('/api/profile/partner');
+      if (cancelled || !r.ok) return;
+      setPartnerPayload(r.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerModalOpen, username]);
+
   if (!user) return null;
 
   const { displayName, bio, avatarUrl, dailyDefaultView } = user.profile;
   const titleName = displayName.trim() || '未设置昵称';
+
+  const partnerUser = partnerPayload?.user;
+  const partnerTitleName =
+    partnerUser?.profile.displayName.trim() || (partnerUser ? '未设置昵称' : '');
+  const partnerBio = partnerUser?.profile.bio ?? '';
 
   const quickEntries: QuickEntry[] = [
     {
@@ -179,8 +268,8 @@ export default function ProfilePage() {
         >
           <SectionLabel title="我的小档案" />
 
-          <div className="mx-auto mt-5 flex justify-center">
-            <div className="relative">
+          <div className="mx-auto mt-5 flex max-w-sm items-end justify-center gap-2.5 sm:gap-5">
+            <div className="relative shrink-0 -translate-x-0.5 sm:-translate-x-2">
               <div
                 className="relative bg-white px-3 pt-3 pb-4 shadow-[0_14px_28px_-16px_rgba(199,117,154,0.45),0_6px_10px_-8px_rgba(60,40,20,0.2)]"
                 style={{ transform: 'rotate(-2.2deg)', borderRadius: '6px' }}
@@ -191,6 +280,37 @@ export default function ProfilePage() {
                 </p>
               </div>
             </div>
+
+            {partnerUser ? (
+              <button
+                type="button"
+                onClick={() => setPartnerModalOpen(true)}
+                className="group relative shrink-0 translate-x-0.5 border-0 bg-transparent p-0 text-left sm:translate-x-2"
+                aria-label={`查看 ${partnerTitleName} 的资料与关于 Ta`}
+              >
+                <div
+                  className="relative box-border flex w-[104px] shrink-0 flex-col items-center bg-white px-2.5 pt-2.5 pb-3 shadow-[0_14px_28px_-16px_rgba(199,117,154,0.45),0_6px_10px_-8px_rgba(60,40,20,0.2)] transition-[transform,box-shadow] group-hover:-translate-y-0.5 group-hover:shadow-[0_18px_32px_-14px_rgba(199,117,154,0.5),0_8px_14px_-8px_rgba(60,40,20,0.22)] group-active:translate-y-0"
+                  style={{ transform: 'rotate(2.35deg)', borderRadius: '6px' }}
+                >
+                  <UserAvatar
+                    username={partnerUser.username}
+                    avatarUrl={partnerUser.profile.avatarUrl || undefined}
+                    size="lg"
+                  />
+                  <p className="mt-1.5 flex w-full min-w-0 items-center justify-center gap-1 font-display text-[10px] font-bold text-brown-title/75 sm:text-[11px]">
+                    {partnerOnline ? (
+                      <span className="relative inline-flex h-2 w-2 shrink-0" title="在线" aria-label="在线">
+                        <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/45" />
+                        <span className="relative inline-block h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_2px_rgb(255_255_255)]" />
+                      </span>
+                    ) : null}
+                    <span className="min-w-0 max-w-full truncate text-center tracking-normal" title={`@${partnerUser.username}`}>
+                      @{partnerUser.username}
+                    </span>
+                  </p>
+                </div>
+              </button>
+            ) : null}
           </div>
 
           <h2 className="mt-5 font-display text-[22px] font-bold tracking-wide text-brown-title sm:text-2xl">
@@ -366,6 +486,77 @@ export default function ProfilePage() {
 
         <PageFooter text="把日子写成两个人的诗" />
       </div>
+
+      <Modal
+        visible={partnerModalOpen && Boolean(partnerUser)}
+        onClose={() => setPartnerModalOpen(false)}
+        width="min(92%, 22rem)"
+        ariaLabelledBy={partnerModalTitleId}
+        backdropClassName="z-[1200] bg-black/25 backdrop-blur-[2px]"
+        contentClassName="rounded-[22px] border border-border-sweet/50 bg-gradient-to-b from-white via-white to-rose-50/75 p-5 shadow-[0_12px_40px_rgb(249_172_201/0.22)] ring-1 ring-love/10"
+        panelScrollable
+      >
+        {partnerUser ? (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <h2
+                id={partnerModalTitleId}
+                className="font-display text-base font-bold leading-snug text-brown-title sm:text-lg"
+              >
+                Ta 的小档案
+              </h2>
+              <button
+                type="button"
+                onClick={() => setPartnerModalOpen(false)}
+                className="shrink-0 rounded-full border border-rose-200/80 bg-white/90 px-3 py-1 font-display text-[11px] font-bold text-brown-title/70 transition hover:border-love/45 hover:bg-rose-50/70"
+              >
+                关闭
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="bg-white px-3 pt-3 pb-3.5 shadow-[0_12px_24px_-14px_rgba(199,117,154,0.45),0_6px_10px_-8px_rgba(60,40,20,0.2)]"
+                style={{ transform: 'rotate(1.8deg)', borderRadius: '6px' }}
+              >
+                <UserAvatar
+                  username={partnerUser.username}
+                  avatarUrl={partnerUser.profile.avatarUrl || undefined}
+                  size="xl"
+                />
+              </div>
+              <div className="text-center">
+                <p className="font-display text-lg font-bold tracking-wide text-brown-title sm:text-xl">
+                  {partnerTitleName}
+                </p>
+                <p className="mt-1 flex items-center justify-center gap-2 font-display text-[12px] font-semibold tracking-[0.12em] text-brown-title/60">
+                  {partnerOnline ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_0_2px_rgb(255_255_255)]" />
+                      在线
+                    </span>
+                  ) : (
+                    <span className="text-neutral-400">离线</span>
+                  )}
+                  <span className="text-neutral-300">·</span>
+                  <span>@{partnerUser.username}</span>
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <SectionLabel id="partner-modal-bio" title="关于 Ta" />
+              <div className="mt-3 rounded-2xl border border-rose-200/50 bg-white/95 px-4 py-4 shadow-[0_6px_22px_-14px_rgb(199_117_154/0.28)] sm:px-5 sm:py-4">
+                {partnerBio.trim() ? (
+                  <ProfileAboutBio bio={partnerBio} username={partnerUser.username} />
+                ) : (
+                  <p className="text-center font-display text-sm text-[#a74c72]/75">Ta 还没有写简介呢</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       <DangerConfirmModal
         open={logoutConfirmOpen}

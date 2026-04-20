@@ -27,6 +27,15 @@ import { broadcastDailyEvent, subscribeDailyEvents } from '../lib/dailyEvents.js
 
 export const dailyRouter = Router();
 
+/** SSE `daily` 事件可选带的正文前缀，减轻客户端对「仅元数据」的焦虑（仍应拉全量详情合并） */
+const DAILY_SSE_BODY_PREVIEW_MAX = 120;
+function bodyPreviewForSse(body: string | undefined): string | undefined {
+  if (body === undefined || body === null) return undefined;
+  const t = String(body).trim();
+  if (!t) return undefined;
+  return t.length > DAILY_SSE_BODY_PREVIEW_MAX ? t.slice(0, DAILY_SSE_BODY_PREVIEW_MAX) : t;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type LeanDaily = {
@@ -267,7 +276,12 @@ dailyRouter.use(requireAuth);
 // ─── SSE: 实时事件流 ──────────────────────────────────────────────────────────
 
 dailyRouter.get('/events', (req, res) => {
-  subscribeDailyEvents(req, res);
+  const u = res.locals.authUser;
+  if (!u) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
+  subscribeDailyEvents(req, res, u.username);
 });
 
 // ─── Entry CRUD ────────────────────────────────────────────────────────────────
@@ -337,6 +351,7 @@ dailyRouter.post('/entries', async (req, res) => {
     type: 'entry.created',
     entryId: String(doc._id),
     by: user.username,
+    bodyPreview: bodyPreviewForSse(doc.body),
   });
   res.status(201).json({
     entry: serializeLean(doc.toObject() as LeanDaily),
@@ -423,12 +438,14 @@ dailyRouter.patch('/entries/:id', async (req, res) => {
 
   doc.updatedByUsername = user.username;
   await doc.save();
+  const leanAfter = doc.toObject() as LeanDaily;
   broadcastDailyEvent({
     type: 'entry.updated',
     entryId: String(doc._id),
     by: user.username,
+    bodyPreview: bodyPreviewForSse(leanAfter.body),
   });
-  res.json({ entry: serializeLean(doc.toObject() as LeanDaily) });
+  res.json({ entry: serializeLean(leanAfter) });
 });
 
 dailyRouter.delete('/entries/:id', async (req, res) => {
@@ -525,12 +542,14 @@ dailyRouter.post(
     currentImages.push(imageUrl);
     doc.set('images', currentImages);
     await doc.save();
+    const leanImg = doc.toObject() as LeanDaily;
     broadcastDailyEvent({
       type: 'entry.updated',
       entryId: String(doc._id),
       by: user.username,
+      bodyPreview: bodyPreviewForSse(leanImg.body),
     });
-    res.json({ entry: serializeLean(doc.toObject() as LeanDaily) });
+    res.json({ entry: serializeLean(leanImg) });
   },
 );
 
@@ -560,12 +579,14 @@ dailyRouter.delete('/entries/:id/images/:idx', async (req, res) => {
   doc.set('images', currentImages);
   await doc.save();
   tryDeleteDailyImageFile(removed);
+  const leanDelImg = doc.toObject() as LeanDaily;
   broadcastDailyEvent({
     type: 'entry.updated',
     entryId: String(doc._id),
     by: user.username,
+    bodyPreview: bodyPreviewForSse(leanDelImg.body),
   });
-  res.json({ entry: serializeLean(doc.toObject() as LeanDaily) });
+  res.json({ entry: serializeLean(leanDelImg) });
 });
 
 // ─── Comments ─────────────────────────────────────────────────────────────────

@@ -41,10 +41,22 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
       req.session.regenerate((err) => (err ? reject(err) : resolve()));
     });
     user.authSessionVersion = (user.authSessionVersion ?? 0) + 1;
+    // 先写一枚"最近活跃"游标：REST 兜底（/api/profile/partner）在前端 SSE 尚未建立的空窗期
+    // 仍能把本次登录视为"刚刚活跃"。SSE 接上后 adjustPresence 会负责实时广播 active。
+    user.lastActiveAt = new Date();
     await user.save();
+    const nextVer = Math.trunc(Number(user.authSessionVersion ?? 0));
+    if (!Number.isFinite(nextVer) || nextVer < 0) {
+      res.status(500).json({ error: '登录失败，请稍后再试' });
+      return;
+    }
     req.session.userId = String(user._id);
-    req.session.authVersion = user.authSessionVersion;
-    notifyStaleSseConnections(String(user._id), user.authSessionVersion);
+    req.session.authVersion = nextVer;
+    // 等登录响应发出后再踢旧 SSE：给浏览器先 `close()` 旧 EventSource 的时间，避免同标签误收 session.replaced。
+    // 旧连接被踢 → 触发 adjustPresence(-1)，但下线广播走防抖，新设备稍后建立 SSE 时会取消 away，不会产生绿点闪烁。
+    res.once('finish', () => {
+      notifyStaleSseConnections(String(user._id), nextVer);
+    });
     res.json({ user: toUserPublic(user) });
   } catch (e) {
     console.error('[auth] login session error', e);

@@ -11,7 +11,7 @@ import ReportEntryCard from '@/components/daily/ReportEntryCard';
 import ReportReviewSheet from '@/components/daily/ReportReviewSheet';
 import { apiDelete, apiFetch } from '@/lib/api';
 import { resolveApiUrl } from '@/lib/api';
-import { subscribeDailyEvents } from '@/lib/dailyEvents';
+import { subscribeDailyEvents, subscribeSyncBootstrap } from '@/lib/dailyEvents';
 import { usePartnerAvatars } from '@/components/user';
 import DailyEntryLongPressRow from './DailyEntryLongPressRow';
 
@@ -442,6 +442,31 @@ const Daily = () => {
     },
     [setKindState],
   );
+
+  // SSE `sync`：重连后与服务器时间线游标对比，静默刷新已加载列表（避免漏推窗口内停在旧数据）
+  useEffect(() => {
+    return subscribeSyncBootstrap((payload) => {
+      const hint = payload.latestEntryAt;
+      if (!hint) return;
+      const hintMs = new Date(hint).getTime();
+      if (!Number.isFinite(hintMs)) return;
+      (['daily', 'report'] as const).forEach((kind) => {
+        const st = statesRef.current[kind];
+        if (!st.loaded) return;
+        if (st.entries.length === 0) {
+          void loadFirstPage(kind, true);
+          return;
+        }
+        const maxLocal = st.entries.reduce(
+          (m, e) => Math.max(m, new Date(e.at).getTime()),
+          0,
+        );
+        if (hintMs > maxLocal) {
+          void loadFirstPage(kind, true);
+        }
+      });
+    });
+  }, [loadFirstPage]);
 
   // SSE 增量同步
   useEffect(() => {

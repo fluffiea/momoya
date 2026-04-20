@@ -33,8 +33,19 @@ export async function validateSessionOr401(req: Request, res: Response): Promise
     res.status(401).json({ error: '未登录' });
     return null;
   }
-  const sessionVer = req.session.authVersion ?? 0;
-  const userVer = user.authSessionVersion ?? 0;
+  const rawSv = req.session.authVersion;
+  if (rawSv === undefined || rawSv === null) {
+    await safeDestroySession(req);
+    res.status(401).json({ error: '未登录' });
+    return null;
+  }
+  const sessionVer = Math.trunc(Number(rawSv));
+  const userVer = Math.trunc(Number(user.authSessionVersion ?? 0));
+  if (!Number.isFinite(sessionVer) || !Number.isFinite(userVer)) {
+    await safeDestroySession(req);
+    res.status(401).json({ error: '未登录' });
+    return null;
+  }
   if (sessionVer !== userVer) {
     await safeDestroySession(req);
     res.status(401).json({ error: SESSION_REPLACED_MSG, code: SESSION_REPLACED_CODE });
