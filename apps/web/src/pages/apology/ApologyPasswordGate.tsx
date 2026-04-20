@@ -50,7 +50,7 @@ export default function ApologyPasswordGate({ onSuccess }: ApologyPasswordGatePr
         backdropClassName={APOLOGY_MODAL_BACKDROP}
         contentClassName={APOLOGY_MODAL_PANEL}
       >
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="relative">
           <header className="border-b border-love/15 pb-3 text-center">
             <h2
               id={titleId}

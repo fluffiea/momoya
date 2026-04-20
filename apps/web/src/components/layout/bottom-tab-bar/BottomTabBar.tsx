@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion as Motion, useReducedMotion } from 'framer-motion';
 import cx from 'classnames';
+import { useAuth } from '@/auth/useAuth';
 import homeIcon from './icons/home.svg';
 import homeActiveIcon from './icons/home-active.svg';
 import dailyIcon from './icons/daily.svg';
@@ -48,6 +49,7 @@ const BottomTabBar = () => {
   const location = useLocation();
   const pathname = location.pathname;
   const reduceMotion = useReducedMotion();
+  const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<(HTMLAnchorElement | null)[]>([null, null, null]);
   const [pill, setPill] = useState({ left: 0, top: 0, width: 0, height: 0 });
@@ -58,6 +60,21 @@ const BottomTabBar = () => {
       : pathname === '/profile' || pathname.startsWith('/profile/')
         ? 2
         : 0;
+
+  /*
+   * 「日常」这一项的文案同步逻辑：
+   * - 在 /daily 下且 URL 显式带 view=report/daily 时，跟随 URL（当前在看什么就写什么）
+   * - 其他页面 / 未带 ?view= 时，回落到用户偏好 dailyDefaultView
+   * 这样设置里选了"报备"之后，主页、我的以及日常自身的 Tab label 都显示"报备"，
+   * 和页面标题 / Daily 页的 Segmented 一致。
+   */
+  const isOnDaily = pathname === '/daily';
+  const searchView = new URLSearchParams(location.search).get('view');
+  const queryView =
+    searchView === 'report' || searchView === 'daily' ? searchView : null;
+  const userDefaultView = user?.profile.dailyDefaultView ?? 'daily';
+  const effectiveView = isOnDaily && queryView ? queryView : userDefaultView;
+  const dailyDynamicLabel = effectiveView === 'report' ? '报备' : '日常';
 
   const pillTransition = reduceMotion
     ? { duration: 0.15, ease: 'easeOut' as const }
@@ -79,7 +96,7 @@ const BottomTabBar = () => {
 
   useLayoutEffect(() => {
     updatePill();
-  }, [pathname, updatePill]);
+  }, [pathname, location.search, updatePill]);
 
   // 双击 / 双触检测：300ms 内同一个 tab 被点两次 → 滚顶
   // 兼容 PC 鼠标 dblclick 与移动端触摸（移动端依赖 click，所以手写计时）
@@ -156,7 +173,9 @@ const BottomTabBar = () => {
                 alt=""
                 className="h-5 w-5 shrink-0 sm:h-[22px] sm:w-[22px]"
               />
-              <span className="transition-colors duration-200">{link.label}</span>
+              <span className="transition-colors duration-200">
+                {link.tabKey === 'daily' ? dailyDynamicLabel : link.label}
+              </span>
             </span>
           )}
         </NavLink>

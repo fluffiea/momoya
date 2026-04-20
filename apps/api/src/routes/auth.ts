@@ -3,6 +3,8 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { toUserPublic } from '../lib/userPublic.js';
+import { validateSessionOr401 } from '../middleware/sessionAuth.js';
+import { notifyStaleSseConnections } from '../lib/dailyEvents.js';
 
 export const authRouter = Router();
 
@@ -33,8 +35,21 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
     res.status(401).json({ error: '用户名或密码错误' });
     return;
   }
-  req.session.userId = String(user._id);
-  res.json({ user: toUserPublic(user) });
+  try {
+    // 先换新 session id，再递增版本，避免「先改库、regenerate 失败」导致全端无法登录
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+    user.authSessionVersion = (user.authSessionVersion ?? 0) + 1;
+    await user.save();
+    req.session.userId = String(user._id);
+    req.session.authVersion = user.authSessionVersion;
+    notifyStaleSseConnections(String(user._id), user.authSessionVersion);
+    res.json({ user: toUserPublic(user) });
+  } catch (e) {
+    console.error('[auth] login session error', e);
+    res.status(500).json({ error: '登录失败，请稍后再试' });
+  }
 });
 
 authRouter.post('/logout', (req, res) => {
@@ -53,15 +68,12 @@ authRouter.post('/logout', (req, res) => {
   });
 });
 
-authRouter.get('/me', async (req, res) => {
-  if (!req.session.userId) {
-    res.status(401).json({ error: '未登录' });
-    return;
+authRouter.get('/me', async (req, res, next) => {
+  try {
+    const user = await validateSessionOr401(req, res);
+    if (!user) return;
+    res.json({ user: toUserPublic(user) });
+  } catch (err) {
+    next(err);
   }
-  const user = await User.findById(req.session.userId);
-  if (!user) {
-    res.status(401).json({ error: '未登录' });
-    return;
-  }
-  res.json({ user: toUserPublic(user) });
 });

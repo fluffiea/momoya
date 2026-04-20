@@ -1,3 +1,7 @@
+import {
+  notifySessionReplaced,
+} from '@/auth/sessionReplaced';
+
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
 /** 将 `/api/...` 解析为完整 URL（生产构建带 `VITE_API_BASE_URL` 时使用） */
@@ -11,7 +15,10 @@ export function resolveApiUrl(path: string): string {
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
-): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
+): Promise<
+  | { ok: true; data: T }
+  | { ok: false; status: number; error: string; code?: string }
+> {
   const url = resolveApiUrl(path);
   const hasJsonBody =
     typeof init?.body === 'string' &&
@@ -36,6 +43,11 @@ export async function apiFetch<T>(
     }
   }
   if (!res.ok) {
+    let code: string | undefined;
+    if (typeof body === 'object' && body !== null && 'code' in body) {
+      const c = (body as { code?: unknown }).code;
+      if (typeof c === 'string') code = c;
+    }
     const err =
       typeof body === 'object' &&
       body !== null &&
@@ -43,7 +55,10 @@ export async function apiFetch<T>(
       typeof (body as { error?: string }).error === 'string'
         ? (body as { error: string }).error
         : `请求失败 (${res.status})`;
-    return { ok: false, status: res.status, error: err };
+    if (res.status === 401 && code === 'SESSION_REPLACED') {
+      notifySessionReplaced(err);
+    }
+    return { ok: false, status: res.status, error: err, code };
   }
   return { ok: true, data: body as T };
 }

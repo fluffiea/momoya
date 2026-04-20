@@ -6,12 +6,52 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import sharp from 'sharp';
+import type { DailyTag } from '@momoya/shared';
 import { User } from '../models/User.js';
 import { toUserPublic } from '../lib/userPublic.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { AVATARS_DIR } from '../paths.js';
 import { AVATAR_STATIC_PREFIX, isSafeAvatarFilename, tryDeleteAvatarFile } from '../lib/avatarFiles.js';
 import { encryptProfileField } from '../lib/fieldCrypto.js';
+
+/** 单条自定义 tag 上限长度（展示/输入层也保持同值，避免后端悄悄截断导致前后端不一致） */
+const REPORT_TAG_LABEL_MAX = 16;
+/** 用户级自定义 tag 上限数量，避免滥用 */
+const REPORT_TAG_MAX_ITEMS = 30;
+/** 内置 tag label（大小写/首尾空格归一化后等价），这些不允许出现在用户自定义库中 */
+const BUILTIN_TAG_LABELS = new Set(['干饭', '没干饭']);
+
+type TagInput = { id?: unknown; label?: unknown };
+
+/**
+ * 对 PATCH 过来的 reportTags 做严格归一化：
+ *   - 必须是数组
+ *   - 每项：id 非空字符串、label trim 后非空且 ≤ REPORT_TAG_LABEL_MAX
+ *   - 过滤掉内置 label（如「干饭」），避免持久化库和 UI 内置项重复
+ *   - 按 label 小写去重，保留首次出现顺序
+ *   - 整体长度裁到 REPORT_TAG_MAX_ITEMS
+ */
+function normalizeReportTagsInput(raw: unknown): { ok: true; tags: DailyTag[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: 'reportTags 必须是数组' };
+  }
+  const seen = new Set<string>();
+  const out: DailyTag[] = [];
+  for (const item of raw as TagInput[]) {
+    if (!item || typeof item !== 'object') continue;
+    const id = typeof item.id === 'string' ? item.id.trim() : '';
+    const rawLabel = typeof item.label === 'string' ? item.label.trim() : '';
+    if (!id || !rawLabel) continue;
+    const label = rawLabel.slice(0, REPORT_TAG_LABEL_MAX);
+    if (BUILTIN_TAG_LABELS.has(label)) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: id.slice(0, 64), label });
+    if (out.length >= REPORT_TAG_MAX_ITEMS) break;
+  }
+  return { ok: true, tags: out };
+}
 
 export const profileRouter = Router();
 
@@ -33,10 +73,11 @@ const ALLOWED_UPLOAD_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const AVATAR_OUTPUT_SIZE = 512;
 const AVATAR_OUTPUT_EXT = '.webp';
 
-// 用 memoryStorage：先把上传文件读到内存，由 sharp 处理后写入磁盘
+// 用 memoryStorage：先把上传文件读到内存，由 sharp 处理后写入磁盘。
+// 前端已裁剪 + 压缩，正常文件 < 1MB；上限留 8MB 作为兜底。
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 3 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_UPLOAD_MIMES.has(file.mimetype)) {
       cb(null, true);
@@ -61,8 +102,13 @@ profileRouter.patch('/me', async (req, res) => {
     res.status(401).json({ error: '未登录' });
     return;
   }
-  const { displayName, bio } = req.body ?? {};
-  if (displayName === undefined && bio === undefined) {
+  const { displayName, bio, dailyDefaultView, reportTags } = req.body ?? {};
+  if (
+    displayName === undefined &&
+    bio === undefined &&
+    dailyDefaultView === undefined &&
+    reportTags === undefined
+  ) {
     res.json({ user: toUserPublic(user) });
     return;
   }
@@ -71,6 +117,23 @@ profileRouter.patch('/me', async (req, res) => {
   }
   if (bio !== undefined) {
     user.profile.bio = encryptProfileField(String(bio).slice(0, 2000));
+  }
+  if (dailyDefaultView !== undefined) {
+    if (dailyDefaultView !== 'daily' && dailyDefaultView !== 'report') {
+      res.status(400).json({ error: 'dailyDefaultView 取值无效' });
+      return;
+    }
+    user.profile.dailyDefaultView = dailyDefaultView;
+  }
+  if (reportTags !== undefined) {
+    const r = normalizeReportTagsInput(reportTags);
+    if (!r.ok) {
+      res.status(400).json({ error: r.error });
+      return;
+    }
+    // 用 user.set 走 Mongoose 的路径解析，能确保老 user 文档（没有 reportTags 字段）
+    // 在此时被正确写入并标脏，避免"接口看似成功、库里其实没更新"的现象
+    user.set('profile.reportTags', r.tags);
   }
   await user.save();
   res.json({ user: toUserPublic(user) });
@@ -119,7 +182,7 @@ profileRouter.post(
         const code = typeof err === 'object' && err !== null && 'code' in err ? String((err as { code: string }).code) : '';
         let msg = err instanceof Error ? err.message : '上传失败';
         if (code === 'LIMIT_FILE_SIZE') {
-          msg = '文件过大（最大 3MB）';
+          msg = '图片过大，请换一张更小的图片';
         }
         res.status(400).json({ error: msg });
         return;

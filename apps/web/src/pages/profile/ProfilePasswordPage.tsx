@@ -64,7 +64,7 @@ export default function ProfilePasswordPage() {
         <form onSubmit={(ev) => void handleSubmit(ev)} className="mt-5 flex flex-col gap-5 sm:mt-6">
           <section aria-labelledby="pw-current-heading">
             <SectionLabel id="pw-current-heading" title="当前密码" />
-            <div className="mt-3 rounded-2xl border border-border-sweet/40 bg-white/85 px-4 py-4 shadow-[0_4px_18px_rgb(249_172_201/0.12)] sm:px-5">
+            <div className="romance-note-sheet mt-3">
               <PasswordFieldWithToggle
                 id="pw-current"
                 ariaLabel="当前密码"
@@ -77,7 +77,7 @@ export default function ProfilePasswordPage() {
 
           <section aria-labelledby="pw-new-heading">
             <SectionLabel id="pw-new-heading" title="新密码" />
-            <div className="mt-3 space-y-4 rounded-2xl border border-border-sweet/40 bg-white/85 px-4 py-4 shadow-[0_4px_18px_rgb(249_172_201/0.12)] sm:px-5">
+            <div className="romance-note-sheet mt-3 space-y-4">
               <PasswordFieldWithToggle
                 id="pw-new"
                 label="新密码（至少 6 位）"

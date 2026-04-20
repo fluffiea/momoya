@@ -7,7 +7,7 @@ import { AppRoutes } from './routes';
 export default function App() {
   const { user, loading } = useAuth();
 
-  // 登录后建立 SSE 长连接，登出/卸载时断开
+  // 登录后建立 SSE 长连接；单设备登录时由服务端经 SSE `auth` 事件踢下线，无需轮询 /auth/me
   useEffect(() => {
     if (loading) return;
     if (user) {
@@ -15,9 +15,6 @@ export default function App() {
     } else {
       disconnectDailyEvents();
     }
-    return () => {
-      // 不在 user 变化时断开（otherwise 切换 user 才需要），但应用真卸载时清理
-    };
   }, [user, loading]);
 
   useEffect(() => {

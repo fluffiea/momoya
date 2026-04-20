@@ -8,7 +8,7 @@
   --color-confess-sky: rgb(122 200 228 / 0.75);
   --color-confess-sky-strong: #7ac8e4;
   --color-brown-title: #65490d;
-  --color-border-sweet: #ffd0e2;
+  --color-border-sweet: #f2b9d0;
   --color-chat-blue: rgb(0 179 255);
   --color-chat-pink: rgb(253 106 243);
   --color-countdown-hour: #89caff7f;
@@ -63,6 +63,23 @@
     background-image: var(--romance-bg-layer-grad), var(--romance-bg-layer-dots);
     background-size: auto, 24px 24px;
   }
+
+  /*
+   * 抽屉/底部层打开时由 overlayScrollLock 给 html 加 .scroll-lock；
+   * 主滚动在 TabPane 与二级页浮层上，必须一并禁止 overflow，否则仍会「透传」滑动。
+   */
+  html.scroll-lock,
+  html.scroll-lock body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  html.scroll-lock [data-tab-pane],
+  html.scroll-lock [data-secondary-scroll] {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
 }
 
 @layer components {
@@ -73,6 +90,52 @@
     background-color: var(--romance-bg-base);
     background-image: var(--romance-bg-layer-grad), var(--romance-bg-layer-dots);
     background-size: auto, 24px 24px;
+  }
+
+  /*
+   * 报备页：米色手账桌面风。
+   * 一层柔和米白到奶油的渐变打底，叠一层极淡的竖线网格模拟格纸与一个暖斑光源。
+   */
+  .report-desk-bg {
+    background-color: #fbf4e4;
+    background-image:
+      radial-gradient(1200px 500px at 50% -120px, rgba(255, 255, 255, 0.9) 0%, transparent 60%),
+      radial-gradient(800px 400px at 105% 110%, rgba(196, 126, 90, 0.12) 0%, transparent 60%),
+      repeating-linear-gradient(90deg, rgba(150, 110, 60, 0.05) 0px, rgba(150, 110, 60, 0.05) 1px, transparent 1px, transparent 26px),
+      linear-gradient(180deg, #fbf4e4 0%, #f6e8c9 100%);
+  }
+
+  /*
+   * 报备新建/编辑页内的"大便签"容器：米色纸纹 + 柔和阴影 + 内部段落之间留撕口 / 线条感。
+   * 背景由渐变 + 极淡横格叠加组成，让正文输入自带"格纸"感。
+   */
+  .report-note-sheet {
+    position: relative;
+    padding: 22px 18px 20px;
+    border-radius: 18px;
+    background-color: #fbf1dc;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(255, 255, 255, 0.7) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 100%, rgba(205, 158, 92, 0.14) 0%, transparent 60%),
+      radial-gradient(circle at 50% 50%, rgba(120, 80, 40, 0.05) 0.5px, transparent 1.2px);
+    background-size: auto, auto, 7px 7px;
+    border: 1px solid rgba(196, 151, 92, 0.3);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      0 10px 22px -14px rgba(120, 80, 40, 0.38),
+      0 26px 40px -28px rgba(120, 80, 40, 0.32);
+    transform: rotate(-0.25deg);
+  }
+  /* 正文输入区在报备页覆盖为透明米色 + 手写色调，配合纸纹营造在"便签上写字"的感觉 */
+  .report-note-body textarea {
+    color: #3f2b14 !important;
+    background: transparent !important;
+  }
+  .report-note-body > div {
+    background-color: rgba(255, 248, 231, 0.55) !important;
+    border: 2px dashed rgba(200, 168, 120, 0.6) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
   }
 
   .link-us-shell {
@@ -196,7 +259,17 @@
   }
 
   .daily-entry-card {
-    @apply relative overflow-hidden rounded-[22px] border border-border-sweet/30 bg-gradient-to-b from-white via-white to-rose-50/35 backdrop-blur-[1px];
+    @apply relative rounded-[22px] border border-border-sweet/30 bg-gradient-to-b from-white via-white to-rose-50/35 backdrop-blur-[1px];
+    /* 叠加一层极淡的手账横线，像写在信纸上；透明度低到不影响正文可读 */
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 240, 246, 0.35) 100%),
+      repeating-linear-gradient(
+        0deg,
+        rgba(199, 117, 154, 0.055) 0px,
+        rgba(199, 117, 154, 0.055) 1px,
+        transparent 1px,
+        transparent 28px
+      );
     box-shadow:
       0 2px 24px rgb(249 172 201 / 0.12),
       0 1px 3px rgb(0 0 0 / 0.04);
@@ -322,5 +395,132 @@
     border: 1px dashed currentColor;
     opacity: 0.35;
     pointer-events: none;
+  }
+
+  /* ───────────────────────────────────────────────────────────────────────── */
+  /*  全站共用的"手作工艺"原子（craft-*）                                       */
+  /*  设计原则：保留各页叙事（粉色恋爱 / 米色手账 / 蓝色告白），装饰语言          */
+  /*  统一：纸纹、印章、贴纸、拍立得（已去掉胶带/撕口封条类装饰）。                */
+  /* ───────────────────────────────────────────────────────────────────────── */
+
+  /*
+   * 粉色便签纸容器：与 .report-note-sheet（米色）对仗，同节奏但粉玫粉打底。
+   * 用于日常表单、我的卡片、登录等粉色叙事页面。
+   */
+  .romance-note-sheet {
+    position: relative;
+    padding: 22px 18px 20px;
+    border-radius: 18px;
+    background-color: #fff7fa;
+    /*
+     * 纸质肌理：用两个 radial 高光 + 一张极细的斜向网点做"纸面颗粒感"。
+     * 历史版本用过 0deg 的横向 ruled-line，但文本 line-height 与 30px 无法对齐，
+     * 会出现"字悬在两条线中间"的视觉错位，所以改为更安静的细颗粒。
+     */
+    background-image:
+      radial-gradient(ellipse at 18% 0%, rgba(255, 255, 255, 0.85) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 100%, rgba(249, 172, 201, 0.2) 0%, transparent 60%),
+      radial-gradient(circle at 50% 50%, rgba(199, 117, 154, 0.05) 0.5px, transparent 1.2px);
+    background-size: auto, auto, 7px 7px;
+    border: 1px solid rgba(226, 161, 192, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.8),
+      0 10px 22px -14px rgba(199, 117, 154, 0.32),
+      0 26px 40px -28px rgba(199, 117, 154, 0.24);
+    transform: rotate(-0.2deg);
+  }
+
+  /* 粉色便签正文覆盖（与 .report-note-body 对仗）：写在便签纸上的手写感 */
+  .romance-note-body textarea {
+    color: #5a3446 !important;
+    background: transparent !important;
+  }
+  .romance-note-body > div {
+    background-color: rgba(255, 240, 246, 0.55) !important;
+    border: 2px dashed rgba(249, 172, 201, 0.55) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+  }
+
+
+  /*
+   * 单张报备便签卡（列表项）——原 ReportEntryCard inline style 迁移而来，
+   * 与 .report-note-sheet（表单容器）同风格但略紧凑。
+   */
+  .report-note {
+    position: relative;
+    padding: 13px 14px 12px;
+    border-radius: 16px;
+    background-color: #fbf1dc;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(255, 255, 255, 0.6) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 100%, rgba(205, 158, 92, 0.14) 0%, transparent 60%),
+      radial-gradient(circle at 50% 50%, rgba(120, 80, 40, 0.05) 0.5px, transparent 1.2px);
+    background-size: auto, auto, 7px 7px;
+    border: 1px solid rgba(196, 151, 92, 0.3);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      0 6px 14px -10px rgba(120, 80, 40, 0.35),
+      0 14px 22px -20px rgba(120, 80, 40, 0.22);
+  }
+
+  /*
+   * 拍立得白边图框：单张大图用。包一层 .craft-polaroid，内部 <img> 自动撑满。
+   * 默认略带旋转阴影；上层可再叠 transform 覆盖角度。
+   */
+  .craft-polaroid {
+    display: block;
+    padding: 10px 10px 28px;
+    background: #ffffff;
+    border-radius: 4px;
+    box-shadow: 0 10px 20px -14px rgba(60, 40, 20, 0.5);
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .craft-polaroid > img {
+    display: block;
+    width: 100%;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  /* 九宫格 / 多图用的小拍立得：白边更窄、阴影更浅 */
+  .craft-polaroid-mini {
+    display: block;
+    padding: 4px;
+    background: #ffffff;
+    border-radius: 3px;
+    box-shadow: 0 4px 8px -6px rgba(60, 40, 20, 0.5);
+  }
+  .craft-polaroid-mini > img {
+    display: block;
+    width: 100%;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  /*
+   * 方形双线印章：用于日期章 / "REPORT" 徽章。
+   * 当前色由 color 继承，外部通过 .text-* 或 style.color 控制。
+   */
+  .craft-stamp-rect {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2px 7px;
+    border: 1.5px solid currentColor;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* 斜盖印章（"已阅 / URGENT"等）——描边 + 微旋转，外部控制 color */
+  .craft-stamp-slash {
+    display: inline-block;
+    padding: 3px 8px 2px;
+    border: 2.5px solid currentColor;
+    border-radius: 4px;
+    opacity: 0.82;
+    transform: rotate(-10deg);
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.4);
   }
 }

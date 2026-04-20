@@ -1,3 +1,7 @@
+import {
+  notifySessionReplaced,
+  SESSION_REPLACED_DEFAULT_MESSAGE,
+} from '@/auth/sessionReplaced';
 import { resolveApiUrl } from './api';
 
 /**
@@ -20,7 +24,10 @@ export type DailyEvent =
       by: string;
     }
   | { type: 'comment.updated'; entryId: string; commentId: string; by: string }
-  | { type: 'comment.deleted'; entryId: string; commentId: string; by: string };
+  | { type: 'comment.deleted'; entryId: string; commentId: string; by: string }
+  | { type: 'entry.acked'; entryId: string; by: string }
+  | { type: 'review.upserted'; entryId: string; by: string }
+  | { type: 'review.deleted'; entryId: string; by: string };
 
 type Handler = (event: DailyEvent) => void;
 
@@ -52,11 +59,26 @@ export function connectDailyEvents(): void {
   es.addEventListener('daily', (ev) => {
     dispatch((ev as MessageEvent<string>).data);
   });
+  /** 单设备登录：服务端在别处登录后对旧 SSE 推送并断开，走此事件（无需轮询 /auth/me） */
+  es.addEventListener('auth', (ev) => {
+    try {
+      const raw = (ev as MessageEvent<string>).data;
+      const data = JSON.parse(raw) as { type?: string; message?: string };
+      if (data.type === 'session.replaced') {
+        notifySessionReplaced(
+          typeof data.message === 'string' && data.message.trim()
+            ? data.message.trim()
+            : SESSION_REPLACED_DEFAULT_MESSAGE,
+        );
+        // 主动关闭，否则浏览器会按 retry 反复重连 /events，旧 cookie 导致大量 401
+        disconnectDailyEvents();
+      }
+    } catch {
+      // ignore
+    }
+  });
   // 兼容默认 message 事件（如果后端未来切换）
   es.onmessage = (ev) => dispatch(ev.data);
-  es.onerror = () => {
-    // EventSource 会自行重连；保持连接但不抛错
-  };
 }
 
 export function disconnectDailyEvents(): void {

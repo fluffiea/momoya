@@ -43,7 +43,23 @@ export function AppRoutes() {
           )}
         />
         <Route
+          path="/daily/report/new"
+          element={secondary(
+            <RequireAuth>
+              <DailyComposePage />
+            </RequireAuth>,
+          )}
+        />
+        <Route
           path="/daily/:entryId/edit"
+          element={secondary(
+            <RequireAuth>
+              <DailyComposePage />
+            </RequireAuth>,
+          )}
+        />
+        <Route
+          path="/daily/:entryId/report/edit"
           element={secondary(
             <RequireAuth>
               <DailyComposePage />

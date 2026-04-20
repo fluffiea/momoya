@@ -1,9 +1,12 @@
 import type { RequestHandler } from 'express';
+import { validateSessionOr401 } from './sessionAuth.js';
 
-export const requireAuth: RequestHandler = (req, res, next) => {
-  if (!req.session.userId) {
-    res.status(401).json({ error: '未登录' });
-    return;
+export const requireAuth: RequestHandler = async (req, res, next) => {
+  try {
+    const user = await validateSessionOr401(req, res);
+    if (!user) return;
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 };

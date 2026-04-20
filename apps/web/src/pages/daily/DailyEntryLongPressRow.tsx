@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { lockOverlayScroll } from '@/lib/overlayScrollLock';
 
 const LONG_MS = 520;
 const MOVE_CANCEL = 14;
@@ -21,14 +22,13 @@ export default function DailyEntryLongPressRow({ mine, onEdit, onDelete, childre
 
   useEffect(() => {
     if (!sheetOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockOverlayScroll();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeSheet();
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [sheetOpen, closeSheet]);
@@ -78,7 +78,7 @@ export default function DailyEntryLongPressRow({ mine, onEdit, onDelete, childre
   const sheet = sheetOpen
     ? createPortal(
         <div
-          className="fixed inset-0 z-[2000] flex flex-col justify-end bg-black/20 backdrop-blur-[1px] transition-opacity duration-200"
+          className="fixed inset-0 z-[2000] touch-none flex flex-col justify-end bg-black/20 backdrop-blur-[1px] transition-opacity duration-200"
           role="presentation"
           onClick={(ev) => {
             if (ev.target === ev.currentTarget) closeSheet();

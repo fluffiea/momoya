@@ -9,10 +9,13 @@ const flipSpring = { type: 'spring' as const, stiffness: 320, damping: 28, mass:
 
 export type PartnerWithAvatar = {
   name: string;
-  /** 当前展示用图片 URL（用户头像或已回退的默认图） */
+  /**
+   * 当前展示用图片 URL（用户头像），空字符串或加载失败 → 用首字母圆形回退。
+   * 与 ProfilePage/ProfileEditor 保持一致的"无头像时显示首字母"行为。
+   */
   avatar: string;
-  /** 加载失败时回退的默认图（如本地 yaya / momo） */
-  defaultAvatar: string;
+  /** 无头像/加载失败时显示的首字母（大写） */
+  initial: string;
   showAvatar: boolean;
 };
 
@@ -37,15 +40,24 @@ function PartnerAvatar({
   onAvatarClick: (index: number) => void;
 }) {
   const reducedMotion = useReducedMotion();
-  const [photoSrc, setPhotoSrc] = useState(partner.avatar);
+  const [imgBroken, setImgBroken] = useState(false);
 
   useEffect(() => {
-    setPhotoSrc(partner.avatar);
+    setImgBroken(false);
   }, [partner.avatar]);
 
-  const handleImgError = () => {
-    setPhotoSrc((prev) => (prev === partner.defaultAvatar ? prev : partner.defaultAvatar));
-  };
+  const handleImgError = () => setImgBroken(true);
+  const hasPhoto = Boolean(partner.avatar) && !imgBroken;
+
+  /** 无头像时的首字母胶囊：与个人页/编辑页保持同一视觉语言 */
+  const InitialBadge = (
+    <div
+      aria-hidden
+      className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-rose-100 via-love/20 to-rose-50 font-display text-xl font-bold text-love/90 sm:text-2xl"
+    >
+      {partner.initial}
+    </div>
+  );
 
   const shellClass = cx(
     `relative flex shrink-0 ${AVATAR_SIZE} cursor-pointer items-center justify-center overflow-hidden rounded-full`,
@@ -78,17 +90,30 @@ function PartnerAvatar({
         >
           <AnimatePresence mode="wait" initial={false}>
             {partner.showAvatar ? (
-              <Motion.img
-                key={photoSrc}
-                src={photoSrc}
-                alt={partner.name}
-                className="absolute inset-0 h-full w-full rounded-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                onError={handleImgError}
-              />
+              hasPhoto ? (
+                <Motion.img
+                  key={partner.avatar}
+                  src={partner.avatar}
+                  alt={partner.name}
+                  className="absolute inset-0 h-full w-full rounded-full object-cover"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onError={handleImgError}
+                />
+              ) : (
+                <Motion.div
+                  key="initial"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute inset-0"
+                >
+                  {InitialBadge}
+                </Motion.div>
+              )
             ) : (
               <Motion.span
                 key="name"
@@ -124,7 +149,7 @@ function PartnerAvatar({
         transition={flipSpring}
         whileTap={{ scale: 0.94 }}
       >
-        {/* 正面：照片 */}
+        {/* 正面：头像（有图则显示图片，否则显示首字母圆形） */}
         <div
           className="absolute inset-0 overflow-hidden rounded-full"
           style={{
@@ -133,13 +158,17 @@ function PartnerAvatar({
             transform: 'translateZ(0.5px) rotateY(0deg)',
           }}
         >
-          <img
-            src={photoSrc}
-            alt={partner.name}
-            className="h-full w-full rounded-full object-cover"
-            draggable={false}
-            onError={handleImgError}
-          />
+          {hasPhoto ? (
+            <img
+              src={partner.avatar}
+              alt={partner.name}
+              className="h-full w-full rounded-full object-cover"
+              draggable={false}
+              onError={handleImgError}
+            />
+          ) : (
+            InitialBadge
+          )}
         </div>
         {/* 背面：昵称 */}
         <div

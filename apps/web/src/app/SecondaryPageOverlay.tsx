@@ -9,5 +9,9 @@ import type { ReactNode } from 'react';
  * - overflow 由二级页自己处理（多数页面已是 h-[100dvh] flex 自管理）
  */
 export default function SecondaryPageOverlay({ children }: { children: ReactNode }) {
-  return <div className="fixed inset-0 z-50 overflow-y-auto">{children}</div>;
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" data-secondary-scroll>
+      {children}
+    </div>
+  );
 }

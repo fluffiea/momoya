@@ -14,18 +14,18 @@ type Props = {
 
 const toneLineClass: Record<SectionLabelTone, { left: string; right: string }> = {
   love: {
-    left: 'bg-gradient-to-r from-transparent to-love/35',
-    right: 'bg-gradient-to-l from-transparent to-love/35',
+    left: 'bg-gradient-to-r from-transparent to-love/60',
+    right: 'bg-gradient-to-l from-transparent to-love/60',
   },
   sky: {
-    left: 'bg-gradient-to-r from-transparent to-confess-sky-strong/30',
-    right: 'bg-gradient-to-l from-transparent to-confess-sky-strong/30',
+    left: 'bg-gradient-to-r from-transparent to-confess-sky-strong/45',
+    right: 'bg-gradient-to-l from-transparent to-confess-sky-strong/45',
   },
 };
 
 const toneTextClass: Record<SectionLabelTone, string> = {
-  love: 'text-brown-title/75',
-  sky: 'text-confess-sky-strong/70',
+  love: 'text-brown-title/90',
+  sky: 'text-confess-sky-strong/85',
 };
 
 /**

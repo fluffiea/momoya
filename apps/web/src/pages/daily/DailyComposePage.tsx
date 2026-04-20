@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   DndContext,
   DragOverlay,
@@ -19,11 +19,15 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import cx from 'classnames';
-import type { DailyEntry, DailyTag } from '@momoya/shared';
+import type { DailyEntry, DailyEntryKind, DailyTag, UserPublic } from '@momoya/shared';
 import DailyDateTimePickModal from '@/components/daily/DailyDateTimePickModal';
+import ReportTagPicker from '@/components/daily/ReportTagPicker';
 import SecondaryPageHeader from '@/components/ui/SecondaryPageHeader';
 import SectionLabel from '@/components/ui/SectionLabel';
+import { NoteLabel, SheetHeader } from '@/components/ui/craft';
+import { useAuth } from '@/auth/useAuth';
 import { apiFetch, apiDelete, apiPatchJson, apiPostJson, resolveApiUrl } from '@/lib/api';
+import { compressForDaily } from '@/lib/imageCompression';
 
 // ─── Shared form-field surface ─────────────────────────────────────────────────
 // 与"记录时刻"按钮节奏对齐：rounded-2xl + 阴影 + 暖色 focus 环
@@ -41,9 +45,11 @@ const BODY_MAX_LEN = 20000;
 function DailyComposeBodyTextarea({
   value,
   onChange,
+  placeholder = '写下今天发生的小事…',
 }: {
   value: string;
   onChange: (next: string) => void;
+  placeholder?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // 3 行起步，足以承载几句话；超过 MAX_HEIGHT 由内部滚动接管，避免把整页撑得过长
@@ -80,7 +86,7 @@ function DailyComposeBodyTextarea({
         onChange={(ev) => onChange(ev.target.value)}
         onInput={resize}
         maxLength={BODY_MAX_LEN}
-        placeholder="写下今天发生的小事…"
+        placeholder={placeholder}
         className="block w-full resize-none bg-transparent text-[15px] leading-[1.75] text-neutral-800 outline-none placeholder:text-neutral-400/80"
         style={{ overflow: 'hidden' }}
       />
@@ -249,15 +255,19 @@ function ImageUploadZone({
   onRemovePending,
   onReorder,
   uploading,
+  /** report kind 下展示一个独立的"拍一张"按钮，直接调起系统相机 */
+  showCameraButton = false,
 }: {
   items: ImageItem[];
-  onAddFiles: (files: File[]) => void;
+  onAddFiles: (files: File[]) => void | Promise<void>;
   onRemoveSaved: (id: string) => void;
   onRemovePending: (id: string) => void;
   onReorder: (next: ImageItem[]) => void;
   uploading: boolean;
+  showCameraButton?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   // 桌面用鼠标距离激活（按下移动 ≥6px 即拖），移动端用长按激活（避免与滚动冲突）
@@ -297,7 +307,7 @@ function ImageUploadZone({
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    onAddFiles(arr.slice(0, 9 - total));
+    void onAddFiles(arr.slice(0, 9 - total));
   };
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
@@ -339,7 +349,25 @@ function ImageUploadZone({
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                <span className="text-[9px]">添加</span>
+                <span className="text-[9px]">相册</span>
+              </button>
+            )}
+            {canAdd && showCameraButton && (
+              <button
+                type="button"
+                disabled={uploading}
+                className={cx(
+                  'flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-amber-300/60 bg-amber-50/40 text-amber-600 transition hover:border-amber-400/80 hover:bg-amber-50/70 hover:text-amber-700 disabled:opacity-50',
+                  CELL_SIZE_CLASS,
+                )}
+                onClick={() => cameraInputRef.current?.click()}
+                aria-label="拍一张"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
+                  <circle cx="12" cy="13" r="3.25" strokeLinecap="round" />
+                </svg>
+                <span className="text-[9px]">拍一张</span>
               </button>
             )}
           </div>
@@ -362,7 +390,7 @@ function ImageUploadZone({
       )}
       {!total && (
         <p className="mt-2 text-[11px] text-neutral-400">
-          最多 9 张，JPEG / PNG / WebP，每张 ≤ 5MB
+          最多 9 张，JPEG / PNG / WebP，过大的图片会被自动压缩
         </p>
       )}
 
@@ -374,6 +402,16 @@ function ImageUploadZone({
         className="hidden"
         onChange={(e) => { handleFiles(e.target.files); e.currentTarget.value = ''; }}
       />
+      {showCameraButton && (
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => { handleFiles(e.target.files); e.currentTarget.value = ''; }}
+        />
+      )}
     </div>
   );
 }
@@ -446,22 +484,44 @@ function nowDateTimeParts() {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
-type FormState = { atDate: string; atTime: string; body: string; tagsCsv: string };
+/**
+ * form.tagsCsv 用于 daily 的文本输入；form.tags 用于 report 的 chip 选择。
+ * 两者 serialize 后都参与 baseline / dirty 判断，不会因为分开存储而失效。
+ */
+type FormState = {
+  atDate: string;
+  atTime: string;
+  body: string;
+  tagsCsv: string;
+  tags: DailyTag[];
+};
 
 function serializeForm(f: FormState) { return JSON.stringify(f); }
 
+function labelKey(label: string): string {
+  return label.trim().toLowerCase();
+}
+
 export default function DailyComposePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { entryId } = useParams<{ entryId: string }>();
   const isEdit = Boolean(entryId);
+  const { user, applyUser } = useAuth();
+
+  // 路径判定：`/daily/report/new` 或 `/daily/:id/report/edit` 视为 report
+  const pathIsReport = location.pathname.includes('/report/');
+  const [kind, setKind] = useState<DailyEntryKind>(pathIsReport ? 'report' : 'daily');
+  const isReport = kind === 'report';
 
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(isEdit);
-  const [form, setForm] = useState<FormState>({ atDate: '', atTime: '', body: '', tagsCsv: '' });
+  const [form, setForm] = useState<FormState>({ atDate: '', atTime: '', body: '', tagsCsv: '', tags: [] });
   const [baseline, setBaseline] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [reportTagsInit, setReportTagsInit] = useState(false);
 
   /** 统一的图片项列表：保留用户拖拽后的最终顺序（含已保存 + 待上传） */
   const [imageItems, setImageItems] = useState<ImageItem[]>([]);
@@ -485,14 +545,20 @@ export default function DailyComposePage() {
     setLoading(false);
     if (!r.ok) { setLoadError(r.error); return; }
     const e = r.data.entry;
+    const loadedKind: DailyEntryKind = e.kind === 'report' ? 'report' : 'daily';
+    setKind(loadedKind);
+    // 报备：tags 存进 form.tags；日常：tags 转 CSV 文本
     const next: FormState = {
       atDate: toDateInputValue(e.at),
       atTime: toTimeInputValue(e.at),
       body: e.body,
-      tagsCsv: csvFromTags(e.tags),
+      tagsCsv: loadedKind === 'report' ? '' : csvFromTags(e.tags),
+      tags: loadedKind === 'report' ? e.tags : [],
     };
     setForm(next);
     setBaseline(serializeForm(next));
+    // 编辑模式下 tags 已从 entry 载入，不再让 ReportTagPicker 做默认选中
+    setReportTagsInit(true);
     const savedItems: SavedImageItem[] = (e.images ?? []).map((url) => ({
       kind: 'saved',
       id: url,
@@ -507,7 +573,7 @@ export default function DailyComposePage() {
       void loadEntry();
     } else {
       const { atDate, atTime } = nowDateTimeParts();
-      const next: FormState = { atDate, atTime, body: '', tagsCsv: '' };
+      const next: FormState = { atDate, atTime, body: '', tagsCsv: '', tags: [] };
       setForm(next);
       setBaseline(serializeForm(next));
       setLoading(false);
@@ -525,17 +591,32 @@ export default function DailyComposePage() {
     };
   }, []);
 
-  const handleAddFiles = (files: File[]) => {
+  const handleAddFiles = async (files: File[]) => {
     if (files.length === 0) return;
-    setImageItems((prev) => [
-      ...prev,
-      ...files.map<PendingImageItem>((file) => ({
-        kind: 'pending',
-        id: `pending-${Math.random().toString(36).slice(2, 10)}`,
-        file,
-        objectUrl: URL.createObjectURL(file),
-      })),
-    ]);
+    setImageUploading(true);
+    try {
+      const compressed = await Promise.all(
+        files.map(async (f) => {
+          try {
+            return await compressForDaily(f);
+          } catch {
+            // 压缩失败时回退到原图，由后端大小上限兜底
+            return f;
+          }
+        }),
+      );
+      setImageItems((prev) => [
+        ...prev,
+        ...compressed.map<PendingImageItem>((file) => ({
+          kind: 'pending',
+          id: `pending-${Math.random().toString(36).slice(2, 10)}`,
+          file,
+          objectUrl: URL.createObjectURL(file),
+        })),
+      ]);
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   /** 删除一张已保存的图片：立即调后端 DELETE，按 url 在当前已保存子序列里查 idx */
@@ -545,8 +626,12 @@ export default function DailyComposePage() {
     const idx = savedSeq.findIndex((s) => s.id === savedId);
     if (idx === -1) return;
     setImageUploading(true);
-    const r = await apiDelete(`/api/daily/entries/${entryId}/images/${idx}`);
-    setImageUploading(false);
+    let r: Awaited<ReturnType<typeof apiDelete>>;
+    try {
+      r = await apiDelete(`/api/daily/entries/${entryId}/images/${idx}`);
+    } finally {
+      setImageUploading(false);
+    }
     if (r.ok) {
       const nextSavedUrls = ((r.data as { entry: DailyEntry }).entry.images ?? []);
       savedBaselineRef.current = nextSavedUrls;
@@ -629,8 +714,10 @@ export default function DailyComposePage() {
       .map((i) => (i.kind === 'saved' ? i.url : urlByPendingId.get(i.id) ?? ''))
       .filter(Boolean);
 
-  const leaveToDaily = () =>
-    navigate('/daily', isEdit && entryId ? { replace: true, state: { focusEntryId: entryId } } : { replace: true });
+  const leaveToDaily = () => {
+    const target = `/daily?view=${isReport ? 'report' : 'daily'}`;
+    navigate(target, isEdit && entryId ? { replace: true, state: { focusEntryId: entryId } } : { replace: true });
+  };
 
   const isImagesDirty = useMemo(() => {
     if (pendingCount > 0) return true;
@@ -660,71 +747,155 @@ export default function DailyComposePage() {
   const handleSave = async () => {
     const combined = new Date(`${form.atDate}T${form.atTime}`);
     if (Number.isNaN(combined.getTime())) { setSaveError('请选择有效日期与时间'); return; }
-    if (!form.body.trim()) { setSaveError('正文不能为空'); return; }
+    const hasAnyImage = imageItemsRef.current.length > 0;
+    if (isReport) {
+      // 报备：标签必选；文案和图片至少保留一项
+      if (form.tags.length === 0) { setSaveError('请至少选择一个标签'); return; }
+      if (!form.body.trim() && !hasAnyImage) { setSaveError('文案和图片至少填一项'); return; }
+    } else {
+      if (!form.body.trim()) { setSaveError('正文不能为空'); return; }
+    }
     const atIso = combined.toISOString();
-    const tags = tagsFromCsv(form.tagsCsv);
+    const tags = isReport ? form.tags : tagsFromCsv(form.tagsCsv);
     setSaving(true);
     setSaveError('');
 
     const finalize = async (id: string): Promise<boolean> => {
-      // 上传 pending（如有）
       setImageUploading(true);
-      const up = await uploadPendingImages(id);
-      setImageUploading(false);
-      if (!up.ok) return false;
+      try {
+        const up = await uploadPendingImages(id);
+        if (!up.ok) return false;
 
-      const desired = computeDesiredOrder(up.urlByPendingId);
-      // 上传后，后端 entry.images = [...原 saved（按基线序）, ...本次新上传（按 pending 顺序）]
-      const serverOrderAfterUpload = [
-        ...savedBaselineRef.current,
-        ...imageItemsRef.current
-          .filter((i): i is SavedImageItem => i.kind === 'saved')
-          .map((s) => s.url)
-          .filter((u) => !savedBaselineRef.current.includes(u)),
-      ];
-      const orderChanged =
-        desired.length !== serverOrderAfterUpload.length ||
-        desired.some((u, i) => u !== serverOrderAfterUpload[i]);
+        const desired = computeDesiredOrder(up.urlByPendingId);
+        // 上传后，后端 entry.images = [...原 saved（按基线序）, ...本次新上传（按 pending 顺序）]
+        const serverOrderAfterUpload = [
+          ...savedBaselineRef.current,
+          ...imageItemsRef.current
+            .filter((i): i is SavedImageItem => i.kind === 'saved')
+            .map((s) => s.url)
+            .filter((u) => !savedBaselineRef.current.includes(u)),
+        ];
+        const orderChanged =
+          desired.length !== serverOrderAfterUpload.length ||
+          desired.some((u, i) => u !== serverOrderAfterUpload[i]);
 
-      // 编辑模式下文本 / tags 永远 PATCH（用户可能改了）；新建模式下创建已带这些字段
-      const needPatch = isEdit || orderChanged;
-      if (!needPatch) return true;
+        // 编辑模式下文本 / tags 永远 PATCH（用户可能改了）；新建模式下创建已带这些字段
+        const needPatch = isEdit || orderChanged;
+        if (!needPatch) return true;
 
-      const body: Record<string, unknown> = isEdit
-        ? { at: atIso, body: form.body.trim(), tags }
-        : {};
-      if (orderChanged && desired.length > 0) body.images = desired;
+        const body: Record<string, unknown> = isEdit
+          ? { at: atIso, body: form.body.trim(), tags }
+          : {};
+        if (orderChanged && desired.length > 0) body.images = desired;
 
-      const r = await apiPatchJson<{ entry: DailyEntry }>(`/api/daily/entries/${id}`, body);
-      if (!r.ok) { setSaveError(r.error); return false; }
-      savedBaselineRef.current = r.data.entry.images ?? [];
-      return true;
+        const r = await apiPatchJson<{ entry: DailyEntry }>(`/api/daily/entries/${id}`, body);
+        if (!r.ok) { setSaveError(r.error); return false; }
+        savedBaselineRef.current = r.data.entry.images ?? [];
+        return true;
+      } finally {
+        setImageUploading(false);
+      }
     };
 
-    if (isEdit && entryId) {
-      const ok = await finalize(entryId);
+    try {
+      if (isEdit && entryId) {
+        const ok = await finalize(entryId);
+        if (!ok) return;
+        navigate(`/daily?view=${isReport ? 'report' : 'daily'}`, {
+          replace: true,
+          state: { focusEntryId: entryId },
+        });
+      } else {
+        const r = await apiPostJson<{ entry: DailyEntry }>('/api/daily/entries', {
+          at: atIso, body: form.body.trim(), tags, kind,
+        });
+        if (!r.ok) {
+          setSaveError(r.error);
+          return;
+        }
+        const newId = r.data.entry.id;
+        const ok = await finalize(newId);
+        if (!ok) return;
+        navigate(`/daily?view=${isReport ? 'report' : 'daily'}`, {
+          replace: true,
+          state: { scrollToTop: true },
+        });
+      }
+    } finally {
       setSaving(false);
-      if (!ok) return;
-      navigate('/daily', { replace: true, state: { focusEntryId: entryId } });
-    } else {
-      const r = await apiPostJson<{ entry: DailyEntry }>('/api/daily/entries', {
-        at: atIso, body: form.body.trim(), tags,
-      });
-      if (!r.ok) { setSaving(false); setSaveError(r.error); return; }
-      const newId = r.data.entry.id;
-      const ok = await finalize(newId);
-      setSaving(false);
-      if (!ok) return;
-      navigate('/daily', { replace: true, state: { scrollToTop: true } });
     }
   };
 
   const isBusy = saving || imageUploading;
   const hasImages = imageItems.length > 0;
 
+  // 用户级自定义 tag 库：来自 auth profile，过滤掉可能混入的内置项，稳定顺序
+  const userCustomTags: DailyTag[] = useMemo(() => {
+    const raw = user?.profile.reportTags ?? [];
+    const out: DailyTag[] = [];
+    const seen = new Set<string>(['干饭', '没干饭']);
+    for (const t of raw) {
+      const key = labelKey(t.label);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(t);
+    }
+    return out;
+  }, [user?.profile.reportTags]);
+
+  /**
+   * 自定义 tag 的增删：整组覆盖地 PATCH 到 user profile；
+   * 直接把响应里的最新 user 塞回 auth 上下文（applyUser），
+   * 无需再走 GET /auth/me 的二次刷新——这样 UI 能在 PATCH 返回的同一 tick 里拿到新 customTags，
+   * 不会出现「添加后要刷新才能看到」的错觉。
+   */
+  const persistCustomTags = useCallback(
+    async (next: DailyTag[]) => {
+      const r = await apiPatchJson<{ user: UserPublic }>('/api/profile/me', {
+        reportTags: next,
+      });
+      if (!r.ok) {
+        window.alert(r.error || '保存标签失败');
+        throw new Error(r.error || '保存标签失败');
+      }
+      applyUser(r.data.user);
+    },
+    [applyUser],
+  );
+
+  const handleAddCustomTag = useCallback(
+    async (tag: DailyTag) => {
+      const key = labelKey(tag.label);
+      if (userCustomTags.some((t) => labelKey(t.label) === key)) return;
+      await persistCustomTags([...userCustomTags, tag]);
+    },
+    [persistCustomTags, userCustomTags],
+  );
+
+  const handleRemoveCustomTag = useCallback(
+    async (tag: DailyTag) => {
+      const key = labelKey(tag.label);
+      const next = userCustomTags.filter((t) => labelKey(t.label) !== key);
+      if (next.length === userCustomTags.length) return;
+      await persistCustomTags(next);
+    },
+    [persistCustomTags, userCustomTags],
+  );
+
+  const pageTitle = isReport
+    ? (isEdit ? '编辑报备' : '写一条报备')
+    : (isEdit ? '编辑日常' : '记一条日常');
+  const bodyPlaceholder = isReport
+    ? '今天吃了什么、做了什么…'
+    : '写下今天发生的小事…';
+  const bgClass = isReport ? 'report-desk-bg' : 'home-romance-bg';
+  const saveButtonColor = isReport
+    ? 'bg-[#c47e5a] shadow-[0_6px_18px_rgb(196_126_90_0.32)] hover:bg-[#a9623f]'
+    : 'bg-[#e891b0] shadow-[0_6px_18px_rgb(232_145_176/0.32)] hover:bg-[#d4769a]';
+
   return (
-    <div className="home-romance-bg flex min-h-full flex-col">
-      <SecondaryPageHeader title={isEdit ? '编辑日常' : '记一条日常'} onBack={goBack} />
+    <div className={`${bgClass} flex min-h-full flex-col`}>
+      <SecondaryPageHeader title={pageTitle} onBack={goBack} />
 
       <div className="mx-auto flex w-[92%] max-w-md flex-1 flex-col pb-safe-page pt-4 sm:pt-5">
 
@@ -732,14 +903,42 @@ export default function DailyComposePage() {
         {loadError ? <p className="text-center text-sm text-rose-600">{loadError}</p> : null}
 
         {!loading && !loadError ? (
-          <div className="flex flex-col gap-5 sm:gap-6">
+          <div
+            className={
+              isReport
+                ? 'report-note-sheet flex flex-col gap-5 sm:gap-6'
+                : 'romance-note-sheet flex flex-col gap-5 sm:gap-6'
+            }
+          >
+            <SheetHeader
+              tone={isReport ? 'amber' : 'rose'}
+              stampLabel={isReport ? 'REPORT' : 'DAILY'}
+              title={
+                isReport
+                  ? isEdit
+                    ? '今日报备 · 续写'
+                    : '今日报备'
+                  : isEdit
+                    ? '今日日常 · 续写'
+                    : '今日日常'
+              }
+            />
+          
 
             {/* ── 记录时刻 ──────────────────────────────────── */}
             <section aria-labelledby="dc-when-heading">
-              <SectionLabel id="dc-when-heading" title="记录时刻" />
+              {isReport ? (
+                <NoteLabel tone="amber" title="时刻" />
+              ) : (
+                <SectionLabel id="dc-when-heading" title="记录时刻" />
+              )}
               <button
                 type="button"
-                className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-border-sweet/45 bg-white/85 px-3 py-2.5 text-left shadow-[0_4px_18px_rgb(249_172_201/0.10)] transition hover:border-love/35 hover:bg-white focus-visible:border-love/50 focus-visible:ring-2 focus-visible:ring-love/25 focus-visible:outline-none"
+                className={
+                  isReport
+                    ? 'mt-3 flex w-full items-center gap-3 rounded-[14px] border-2 border-dashed border-[#c8a878]/60 bg-[#fff8e7]/80 px-3 py-2.5 text-left font-display text-[#5c3d16] transition hover:bg-[#fff4d8]'
+                    : 'mt-3 flex w-full items-center gap-3 rounded-2xl border border-border-sweet/45 bg-white/85 px-3 py-2.5 text-left shadow-[0_4px_18px_rgb(249_172_201/0.10)] transition hover:border-love/35 hover:bg-white focus-visible:border-love/50 focus-visible:ring-2 focus-visible:ring-love/25 focus-visible:outline-none'
+                }
                 onClick={() => setPickerOpen(true)}
                 aria-label={`选择记录时刻：当前 ${momentLabel}`}
               >
@@ -780,42 +979,57 @@ export default function DailyComposePage() {
 
             {/* ── 正文 ─────────────────────────────────────── */}
             <section aria-labelledby="dc-body-heading">
-              <SectionLabel id="dc-body-heading" title="正文" />
-              <div className="mt-3">
+              {isReport ? <NoteLabel tone="amber" title="写点什么" /> : <SectionLabel id="dc-body-heading" title="正文" />}
+              <div className={isReport ? 'mt-3 report-note-body' : 'mt-3'}>
                 <DailyComposeBodyTextarea
                   value={form.body}
                   onChange={(body) => setForm((f) => ({ ...f, body }))}
+                  placeholder={bodyPlaceholder}
                 />
               </div>
             </section>
 
             {/* ── 标签 ─────────────────────────────────────── */}
             <section aria-labelledby="dc-tags-heading">
-              <SectionLabel id="dc-tags-heading" title="标签" />
-              <div className={`mt-3 ${fieldSurfaceClass} flex items-center gap-2.5 px-3 py-2.5`}>
-                {/* 左：暖色 # 章，呼应"记录时刻"的左 icon，避免输入框空旷 */}
-                <span
-                  aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-50 to-rose-100/80 text-love ring-1 ring-love/15"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-[18px] w-[18px]">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" />
-                  </svg>
-                </span>
-                <input
-                  id="daily-compose-tags"
-                  className={inputBareClass}
-                  value={form.tagsCsv}
-                  onChange={(e) => setForm((f) => ({ ...f, tagsCsv: e.target.value }))}
-                  placeholder="用逗号分隔，例：周末，散步，小确幸"
-                />
-              </div>
+              {isReport ? <NoteLabel tone="amber" title="贴个标签" /> : <SectionLabel id="dc-tags-heading" title="标签" />}
+              {isReport ? (
+                <div className="mt-3">
+                  <ReportTagPicker
+                    tags={form.tags}
+                    onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+                    customTags={userCustomTags}
+                    onAddCustom={handleAddCustomTag}
+                    onRemoveCustom={handleRemoveCustomTag}
+                    disabled={isBusy}
+                    initialized={reportTagsInit}
+                    onInitialized={() => setReportTagsInit(true)}
+                  />
+                </div>
+              ) : (
+                <div className={`mt-3 ${fieldSurfaceClass} flex items-center gap-2.5 px-3 py-2.5`}>
+                  <span
+                    aria-hidden
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-50 to-rose-100/80 text-love ring-1 ring-love/15"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-[18px] w-[18px]">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16" />
+                    </svg>
+                  </span>
+                  <input
+                    id="daily-compose-tags"
+                    className={inputBareClass}
+                    value={form.tagsCsv}
+                    onChange={(e) => setForm((f) => ({ ...f, tagsCsv: e.target.value }))}
+                    placeholder="用逗号分隔，例：周末，散步，小确幸"
+                  />
+                </div>
+              )}
             </section>
 
             {/* ── 图片 ─────────────────────────────────────── */}
             <section aria-labelledby="dc-images-heading">
               <div className="flex items-baseline justify-between">
-                <SectionLabel id="dc-images-heading" title="图片" />
+                {isReport ? <NoteLabel tone="amber" title="贴张照片" /> : <SectionLabel id="dc-images-heading" title="图片" />}
                 {hasImages ? (
                   <span className="font-display text-[11px] tabular-nums text-brown-title/45">
                     {imageItems.length}/9
@@ -825,11 +1039,12 @@ export default function DailyComposePage() {
               <div className="mt-3">
                 <ImageUploadZone
                   items={imageItems}
-                  onAddFiles={handleAddFiles}
+                  onAddFiles={(files) => void handleAddFiles(files)}
                   onRemoveSaved={(id) => void handleRemoveSaved(id)}
                   onRemovePending={handleRemovePending}
                   onReorder={handleReorder}
                   uploading={imageUploading}
+                  showCameraButton={isReport}
                 />
               </div>
             </section>
@@ -852,10 +1067,10 @@ export default function DailyComposePage() {
               <button
                 type="button"
                 disabled={isBusy}
-                className="flex-1 rounded-2xl bg-[#e891b0] py-2.5 font-display text-[14px] font-semibold text-white shadow-[0_6px_18px_rgb(232_145_176/0.32)] transition hover:bg-[#d4769a] disabled:opacity-60"
+                className={`flex-1 rounded-2xl py-2.5 font-display text-[14px] font-semibold text-white transition disabled:opacity-60 ${saveButtonColor}`}
                 onClick={() => void handleSave()}
               >
-                {saving ? '保存中…' : imageUploading ? '上传中…' : '保存'}
+                {saving ? '保存中…' : imageUploading ? '上传中…' : isReport ? '撕下便签 · 贴给 ta' : '保存'}
               </button>
             </div>
           </div>

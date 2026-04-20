@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DailyComment } from '@momoya/shared';
+import { UserAvatar } from '@/components/user';
 import { apiFetch } from '@/lib/api';
 import { subscribeDailyEvents } from '@/lib/dailyEvents';
 
@@ -10,11 +11,13 @@ interface Props {
   entryId: string;
   /** Sheet 或页面关闭后可由外部回传最新数量（可选） */
   countOverride?: number;
+  /** 与评论详情页一致：username → 头像 URL（由列表页 `usePartnerAvatars` 注入，避免重复请求） */
+  resolveAvatar: (username: string) => string | undefined;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export default function DailyCommentSection({ entryId, countOverride }: Props) {
+export default function DailyCommentSection({ entryId, countOverride, resolveAvatar }: Props) {
   const navigate = useNavigate();
   const [comments, setComments] = useState<DailyComment[]>([]);
   const [localCount, setLocalCount] = useState<number | null>(null);
@@ -100,13 +103,16 @@ export default function DailyCommentSection({ entryId, countOverride }: Props) {
             <li key={c.id}>
               <button
                 type="button"
-                className="flex w-full items-baseline gap-1.5 text-left"
+                className="flex w-full items-center gap-2 text-left"
                 onClick={goToComments}
               >
-                <span className="shrink-0 text-[11px] font-semibold text-[#e891b0]">
-                  @{c.username}
+                <UserAvatar username={c.username} avatarUrl={resolveAvatar(c.username)} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-semibold text-[#e891b0]">
+                    @{c.username}
+                  </span>
+                  <span className="line-clamp-1 text-[12px] text-neutral-500">{c.body}</span>
                 </span>
-                <span className="truncate text-[12px] text-neutral-500">{c.body}</span>
               </button>
             </li>
           ))}

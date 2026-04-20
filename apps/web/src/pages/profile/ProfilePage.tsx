@@ -1,13 +1,92 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion as Motion } from 'framer-motion';
+import type { DailyEntryKind, UserPublic } from '@momoya/shared';
 import { useAuth } from '@/auth/useAuth';
 import DangerConfirmModal from '@/components/ui/DangerConfirmModal';
 import PageFooter from '@/components/ui/PageFooter';
 import SectionLabel from '@/components/ui/SectionLabel';
-import { resolveApiUrl } from '@/lib/api';
+import { UserAvatar } from '@/components/user';
+import { apiPatchJson } from '@/lib/api';
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
+
+/** 关于我：单行且宽度够时正文与签名同一行（签名靠右），否则签名单独一行且始终靠右 */
+function ProfileAboutBio({ bio, username }: { bio: string; username: string }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const bioRef = useRef<HTMLParagraphElement>(null);
+  const sigRef = useRef<HTMLParagraphElement>(null);
+  const [layout, setLayout] = useState<'beside' | 'stack'>('beside');
+
+  const runMeasure = useCallback(() => {
+    const wrap = wrapRef.current;
+    const bioEl = bioRef.current;
+    const sigEl = sigRef.current;
+    if (!wrap || !bioEl || !sigEl) return;
+
+    const cs = getComputedStyle(bioEl);
+    const lh = parseFloat(cs.lineHeight);
+    const fs = parseFloat(cs.fontSize);
+    const lineH = Number.isFinite(lh) && lh > 0 ? lh : fs * 1.75;
+    if (bioEl.scrollHeight > lineH * 1.35) {
+      setLayout('stack');
+      return;
+    }
+
+    const gap = 12;
+    const wWrap = wrap.clientWidth;
+    const wSig = sigEl.getBoundingClientRect().width;
+
+    const prev = { display: bioEl.style.display, width: bioEl.style.width, maxWidth: bioEl.style.maxWidth };
+    bioEl.style.display = 'inline-block';
+    bioEl.style.width = 'max-content';
+    bioEl.style.maxWidth = '100%';
+    void bioEl.offsetWidth;
+    const wBio = bioEl.getBoundingClientRect().width;
+    bioEl.style.display = prev.display;
+    bioEl.style.width = prev.width;
+    bioEl.style.maxWidth = prev.maxWidth;
+    void bioEl.offsetWidth;
+
+    setLayout(wBio + wSig + gap <= wWrap + 0.5 ? 'beside' : 'stack');
+  }, []);
+
+  useLayoutEffect(() => {
+    runMeasure();
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => runMeasure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [bio, username, runMeasure]);
+
+  const bioClass =
+    'whitespace-pre-wrap break-words font-display text-[15px] leading-[1.75] text-[#5a3446] sm:text-[15.5px] ' +
+    (layout === 'beside'
+      ? 'inline-block min-w-0 max-w-[calc(100%-7rem)] text-left'
+      : 'block w-full text-left');
+
+  return (
+    <div
+      ref={wrapRef}
+      className={layout === 'beside' ? 'flex flex-row items-end justify-between gap-x-3' : 'flex flex-col gap-2'}
+    >
+      <p ref={bioRef} className={bioClass}>
+        {bio}
+      </p>
+      <p
+        ref={sigRef}
+        className={
+          'flex items-center gap-1.5 font-display text-[11px] font-normal italic text-love/70 ' +
+          (layout === 'beside' ? 'shrink-0' : 'self-end')
+        }
+      >
+        <span aria-hidden className="h-px w-6 shrink-0 bg-gradient-to-r from-transparent to-love/35" />
+        {`@${username}`}
+      </p>
+    </div>
+  );
+}
 
 type QuickEntry = {
   id: string;
@@ -16,12 +95,6 @@ type QuickEntry = {
   to: string;
   icon: ReactNode;
 };
-
-const PencilIcon = (
-  <svg viewBox="0 0 20 20" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden>
-    <path d="M14.69 2.66a2.25 2.25 0 0 1 3.18 3.18l-9.1 9.1a2 2 0 0 1-.86.5l-3.18.95a.75.75 0 0 1-.93-.93l.95-3.18a2 2 0 0 1 .5-.86l9.44-9.44Zm1.06 1.06L6.31 13.16a.5.5 0 0 0-.13.22l-.6 2.04 2.04-.6a.5.5 0 0 0 .22-.13l9.44-9.44a.75.75 0 0 0-1.53-1.53Z" />
-  </svg>
-);
 
 const UserIcon = (
   <svg viewBox="0 0 20 20" fill="currentColor" className="h-[18px] w-[18px]" aria-hidden>
@@ -37,14 +110,10 @@ const LockIcon = (
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  const [heroAvatarBroken, setHeroAvatarBroken] = useState(false);
+  const { user, refresh, logout } = useAuth();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
-
-  useEffect(() => {
-    setHeroAvatarBroken(false);
-  }, [user?.profile.avatarUrl]);
+  const [viewPending, setViewPending] = useState(false);
 
   const confirmLogout = useCallback(async () => {
     setLogoutPending(true);
@@ -59,21 +128,29 @@ export default function ProfilePage() {
     }
   }, [logout, navigate]);
 
+  const handleChangeDefaultView = useCallback(
+    async (next: DailyEntryKind) => {
+      if (!user || user.profile.dailyDefaultView === next) return;
+      setViewPending(true);
+      const r = await apiPatchJson<{ user: UserPublic }>('/api/profile/me', {
+        dailyDefaultView: next,
+      });
+      setViewPending(false);
+      if (r.ok) {
+        await refresh();
+      } else {
+        window.alert(r.error);
+      }
+    },
+    [user, refresh],
+  );
+
   if (!user) return null;
 
-  const { displayName, bio, avatarUrl } = user.profile;
-  const previewSrc = avatarUrl ? resolveApiUrl(avatarUrl) : '';
-  const initial = (displayName || user.username).slice(0, 1).toUpperCase();
+  const { displayName, bio, avatarUrl, dailyDefaultView } = user.profile;
   const titleName = displayName.trim() || '未设置昵称';
 
   const quickEntries: QuickEntry[] = [
-    {
-      id: 'new-daily',
-      label: '记一条日常',
-      hint: '写下今天的小心情',
-      to: '/daily/new',
-      icon: PencilIcon,
-    },
     {
       id: 'edit-profile',
       label: '编辑资料',
@@ -103,37 +180,22 @@ export default function ProfilePage() {
           <SectionLabel title="我的小档案" />
 
           <div className="mx-auto mt-5 flex justify-center">
-            {previewSrc && !heroAvatarBroken ? (
-              <div className="relative">
-                <span
-                  aria-hidden
-                  className="absolute -inset-1.5 rounded-full bg-gradient-to-br from-love/35 via-rose-200/40 to-transparent blur-md"
-                />
-                <div className="relative h-[88px] w-[88px] overflow-hidden rounded-full border-2 border-white shadow-[0_8px_24px_rgb(249_172_201/0.35)] ring-1 ring-love/15 sm:h-24 sm:w-24">
-                  <img
-                    src={previewSrc}
-                    alt=""
-                    className="block h-full w-full object-cover object-center"
-                    onError={() => setHeroAvatarBroken(true)}
-                  />
-                </div>
-              </div>
-            ) : (
+            <div className="relative">
               <div
-                className="relative flex h-[88px] w-[88px] items-center justify-center rounded-full border-2 border-white bg-gradient-to-br from-rose-100 via-love/20 to-rose-50 text-3xl font-semibold text-love/90 shadow-[0_8px_24px_rgb(249_172_201/0.35)] ring-1 ring-love/15 sm:h-24 sm:w-24"
-                aria-hidden
+                className="relative bg-white px-3 pt-3 pb-4 shadow-[0_14px_28px_-16px_rgba(199,117,154,0.45),0_6px_10px_-8px_rgba(60,40,20,0.2)]"
+                style={{ transform: 'rotate(-2.2deg)', borderRadius: '6px' }}
               >
-                {initial}
+                <UserAvatar username={user.username} avatarUrl={avatarUrl || undefined} size="xl" />
+                <p className="mt-2 text-center font-display text-[12px] font-bold tracking-[0.18em] text-brown-title/75">
+                  @{user.username}
+                </p>
               </div>
-            )}
+            </div>
           </div>
 
-          <h2 className="mt-3 font-display text-[22px] font-bold tracking-wide text-brown-title sm:text-2xl">
+          <h2 className="mt-5 font-display text-[22px] font-bold tracking-wide text-brown-title sm:text-2xl">
             {titleName}
           </h2>
-          <p className="mt-1 font-display text-[12px] tracking-[0.2em] text-brown-title/55 sm:text-[13px]">
-            @{user.username}
-          </p>
         </Motion.section>
 
         {/* ── 简介卡 ───────────────────────────────────────── */}
@@ -146,23 +208,105 @@ export default function ProfilePage() {
         >
           <SectionLabel id="profile-bio-heading" title="关于我" />
 
-          <div className="mt-3 rounded-2xl border border-border-sweet/45 bg-white/85 px-5 py-4 shadow-[0_4px_18px_rgb(249_172_201/0.16)] sm:px-6 sm:py-5">
+          <div className="mt-3 rounded-2xl border border-rose-200/50 bg-white/95 px-5 py-4 shadow-[0_6px_22px_-14px_rgb(199_117_154/0.28)] sm:px-6 sm:py-5">
             {bio.trim() ? (
-              <p className="whitespace-pre-wrap text-[14px] leading-[1.85] text-neutral-700 sm:text-[15px]">
-                {bio}
-              </p>
+              <ProfileAboutBio bio={bio} username={user.username} />
             ) : (
-              <div className="flex flex-col items-center gap-2 py-2 text-center">
-                <p className="text-sm text-neutral-400">还没有写简介呢</p>
+              <div className="flex flex-col items-start gap-3">
+                <p className="font-display text-sm text-[#a74c72]/80">还没有写简介呢</p>
                 <button
                   type="button"
                   onClick={() => navigate('/profile/edit')}
-                  className="rounded-full border border-love/30 bg-white px-4 py-1 font-display text-[12px] font-bold text-brown-title/85 transition hover:border-love/55 hover:bg-rose-50/60"
+                  className="rounded-full border border-love/40 bg-white px-4 py-1 font-display text-[12px] font-bold text-brown-title/85 transition hover:border-love/60 hover:bg-rose-50/60"
                 >
                   去补一句话
                 </button>
               </div>
             )}
+          </div>
+        </Motion.section>
+
+        {/* ── 偏好设置 ─────────────────────────────────────── */}
+        <Motion.section
+          className="mt-7 sm:mt-8"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: easeOut, delay: 0.08 }}
+          aria-labelledby="profile-prefs-heading"
+        >
+          <SectionLabel id="profile-prefs-heading" title="偏好设置" />
+
+          <div className="relative mt-3 rounded-2xl border border-border-sweet/70 bg-white/92 px-5 py-4 shadow-[0_4px_18px_rgb(199_117_154/0.18)] sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[14px] font-semibold text-brown-title">
+                  日常默认视图
+                </p>
+                <p className="mt-0.5 text-[12px] text-neutral-500">
+                  打开「日常」Tab 时先展示哪种内容
+                </p>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="日常默认视图"
+                className="relative inline-flex items-center gap-1 overflow-hidden rounded-full p-1"
+              >
+                {/*
+                 * 与 Daily 页的 ViewSegmented 同源：背景色 + 滑动丸子。
+                 * 这里放在 ProfilePage 里不共享 layoutId，和 Daily 分段是独立的两个小动画。
+                 */}
+                <Motion.div
+                  aria-hidden
+                  className="absolute inset-0 -z-10 rounded-full"
+                  initial={false}
+                  animate={{
+                    backgroundColor:
+                      dailyDefaultView === 'daily'
+                        ? 'rgba(253, 224, 235, 0.65)'
+                        : 'rgba(254, 235, 200, 0.65)',
+                  }}
+                  transition={{ duration: 0.28, ease: 'easeOut' }}
+                />
+                {(['daily', 'report'] as const).map((v) => {
+                  const active = dailyDefaultView === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      disabled={viewPending}
+                      onClick={() => void handleChangeDefaultView(v)}
+                      className="relative rounded-full px-3 py-1 font-display text-[12px] font-semibold transition-colors disabled:opacity-60"
+                    >
+                      {active && (
+                        <Motion.span
+                          layoutId="profile-default-view-pill"
+                          aria-hidden
+                          className={`absolute inset-0 rounded-full bg-white ${
+                            v === 'daily'
+                              ? 'shadow-[0_2px_8px_rgb(249_172_201/0.45)]'
+                              : 'shadow-[0_2px_8px_rgb(251_191_36/0.45)]'
+                          }`}
+                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        />
+                      )}
+                      <span
+                        className={`relative z-10 ${
+                          active
+                            ? v === 'daily'
+                              ? 'text-love'
+                              : 'text-amber-600'
+                            : 'text-brown-title/55'
+                        }`}
+                      >
+                        {v === 'daily' ? '日常' : '报备'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </Motion.section>
 
@@ -176,13 +320,13 @@ export default function ProfilePage() {
         >
           <SectionLabel id="profile-quick-heading" title="快捷入口" />
 
-          <nav className="mt-3 flex flex-col gap-2.5" aria-label="个人相关操作">
+          <nav className="mt-3 flex flex-col gap-3.5" aria-label="个人相关操作">
             {quickEntries.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 onClick={() => navigate(entry.to)}
-                className="profile-entry-card group relative flex w-full items-center gap-3.5 rounded-2xl border border-border-sweet/40 bg-white/85 px-4 py-3.5 text-left shadow-[0_2px_12px_rgb(249_172_201/0.12)] transition hover:-translate-y-px hover:border-love/40 hover:bg-white hover:shadow-[0_6px_18px_rgb(249_172_201/0.22)] sm:px-5"
+                className="profile-entry-card group relative flex w-full items-center gap-3.5 rounded-2xl border border-border-sweet/70 bg-white/92 px-4 py-3.5 text-left shadow-[0_3px_14px_rgb(199_117_154/0.18)] transition hover:-translate-y-px hover:border-love/55 hover:bg-white hover:shadow-[0_8px_22px_rgb(199_117_154/0.28)] sm:px-5"
               >
                 <span
                   className="profile-entry-seal flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white sm:h-12 sm:w-12"

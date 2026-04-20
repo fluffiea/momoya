@@ -7,10 +7,14 @@ import type {
   DailyEntry as DailyEntryDto,
   DailyComment as DailyCommentDto,
   DailyEntriesPage,
+  DailyEntryKind,
+  DailyAck,
+  ReportReview as ReportReviewDto,
 } from '@momoya/shared';
 import type { HydratedDocument } from 'mongoose';
 import { DailyEntryModel } from '../models/DailyEntry.js';
 import { DailyCommentModel } from '../models/DailyComment.js';
+import { ReportReviewModel } from '../models/ReportReview.js';
 import { User } from '../models/User.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { DAILY_IMAGES_DIR } from '../paths.js';
@@ -33,6 +37,8 @@ type LeanDaily = {
   images: string[];
   createdByUsername?: string | null;
   updatedByUsername?: string | null;
+  kind?: DailyEntryKind | null;
+  acks?: { username: string; at: Date }[];
 };
 
 type LeanComment = {
@@ -44,7 +50,25 @@ type LeanComment = {
   createdAt: Date;
 };
 
+type LeanReview = {
+  _id: { toString(): string };
+  entryId: string;
+  username: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 // ─── Serializers ──────────────────────────────────────────────────────────────
+
+function normalizeKind(v: unknown): DailyEntryKind {
+  return v === 'report' ? 'report' : 'daily';
+}
+
+function serializeAcks(raw: { username: string; at: Date }[] | undefined): DailyAck[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((a) => ({ username: a.username, at: new Date(a.at).toISOString() }));
+}
 
 function serializeLean(d: LeanDaily): DailyEntryDto {
   return {
@@ -55,6 +79,8 @@ function serializeLean(d: LeanDaily): DailyEntryDto {
     images: d.images ?? [],
     createdByUsername: d.createdByUsername ?? undefined,
     updatedByUsername: d.updatedByUsername ?? undefined,
+    kind: normalizeKind(d.kind),
+    acks: serializeAcks(d.acks),
   };
 }
 
@@ -66,6 +92,17 @@ function serializeComment(c: LeanComment): DailyCommentDto {
     body: c.body,
     username: c.username,
     createdAt: new Date(c.createdAt).toISOString(),
+  };
+}
+
+function serializeReview(r: LeanReview): ReportReviewDto {
+  return {
+    id: String(r._id),
+    entryId: r.entryId,
+    username: r.username,
+    body: r.body,
+    createdAt: new Date(r.createdAt).toISOString(),
+    updatedAt: new Date(r.updatedAt).toISOString(),
   };
 }
 
@@ -98,7 +135,8 @@ const dailyImageUpload = multer({
       cb(null, `${randomUUID()}${ext}`);
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  // 前端会先做压缩，正常走到这里的文件 < 2MB；上限留 15MB 作为"未压缩原图"兜底
+  limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (mimeToExt[file.mimetype]) {
       cb(null, true);
@@ -137,24 +175,44 @@ function decodeCursor(cursor: string): { at: Date; id: string } | null {
   }
 }
 
+function parseKindQuery(v: unknown): DailyEntryKind {
+  return v === 'report' ? 'report' : 'daily';
+}
+
 dailyRouter.get('/entries', async (req, res) => {
   const rawLimit = Number.parseInt(String(req.query.limit ?? ''), 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, MAX_PAGE_LIMIT)
     : DEFAULT_PAGE_LIMIT;
 
+  const kind = parseKindQuery(req.query.kind);
+
   const cursor = typeof req.query.cursor === 'string' && req.query.cursor.length > 0
     ? decodeCursor(req.query.cursor)
     : null;
 
   // 多取 1 条用于判断是否还有下一页
-  const filter: Record<string, unknown> = {};
+  // kind=daily 时兼容旧文档（无 kind 字段）：$in ['daily', null, undefined]
+  const kindFilter =
+    kind === 'report'
+      ? { kind: 'report' }
+      : { $or: [{ kind: 'daily' }, { kind: { $exists: false } }, { kind: null }] };
+
+  const filter: Record<string, unknown> = { ...kindFilter };
   if (cursor) {
     // (at < cursor.at) 或 (at == cursor.at 且 _id < cursor.id)
-    filter.$or = [
+    const cursorCond = [
       { at: { $lt: cursor.at } },
       { at: cursor.at, _id: { $lt: cursor.id } },
     ];
+    // 需要与 kind filter 复合（已经有 $or 时，改用 $and 包两层）
+    if (Array.isArray((filter as { $or?: unknown[] }).$or)) {
+      const existingOr = (filter as { $or: unknown[] }).$or;
+      delete (filter as { $or?: unknown[] }).$or;
+      filter.$and = [{ $or: existingOr }, { $or: cursorCond }];
+    } else {
+      filter.$or = cursorCond;
+    }
   }
 
   const docs = await DailyEntryModel.find(filter)
@@ -167,8 +225,28 @@ dailyRouter.get('/entries', async (req, res) => {
   const last = pageDocs[pageDocs.length - 1];
   const nextCursor = hasMore && last ? encodeCursor(new Date(last.at), String(last._id)) : null;
 
+  // 列表里对 report 条目做一次批量 review 查询，避免前端拉到列表后还需要逐条拉详情
+  const entries = pageDocs.map(serializeLean);
+  if (kind === 'report' && entries.length > 0) {
+    const entryIds = entries.map((e) => e.id);
+    const reviews = await ReportReviewModel.find({ entryId: { $in: entryIds } })
+      .lean<LeanReview[]>();
+    // 每条 entry 最多一条 review（由 receiver 写入）；如有多条（理论上只会有一条）以最新为准
+    const byEntry = new Map<string, LeanReview>();
+    for (const r of reviews) {
+      const existing = byEntry.get(r.entryId);
+      if (!existing || new Date(r.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+        byEntry.set(r.entryId, r);
+      }
+    }
+    for (const entry of entries) {
+      const r = byEntry.get(entry.id);
+      entry.review = r ? serializeReview(r) : null;
+    }
+  }
+
   const payload: DailyEntriesPage = {
-    entries: pageDocs.map(serializeLean),
+    entries,
     nextCursor,
   };
   res.json(payload);
@@ -200,7 +278,12 @@ dailyRouter.get('/entries/:id', async (req, res) => {
     res.status(404).json({ error: '不存在' });
     return;
   }
-  res.json({ entry: serializeLean(doc) });
+  const payload = serializeLean(doc);
+  if (payload.kind === 'report') {
+    const review = await ReportReviewModel.findOne({ entryId: req.params.id }).lean<LeanReview | null>();
+    payload.review = review ? serializeReview(review) : null;
+  }
+  res.json({ entry: payload });
 });
 
 dailyRouter.post('/entries', async (req, res) => {
@@ -209,9 +292,9 @@ dailyRouter.post('/entries', async (req, res) => {
     res.status(401).json({ error: '未登录' });
     return;
   }
-  const { at, body, tags } = req.body ?? {};
-  if (!at || !body) {
-    res.status(400).json({ error: '缺少 at 或 body' });
+  const { at, body, tags, kind: rawKind } = req.body ?? {};
+  if (!at) {
+    res.status(400).json({ error: '缺少 at' });
     return;
   }
   const atDate = new Date(String(at));
@@ -219,6 +302,8 @@ dailyRouter.post('/entries', async (req, res) => {
     res.status(400).json({ error: '时间格式无效' });
     return;
   }
+  const kind: DailyEntryKind = rawKind === 'report' ? 'report' : 'daily';
+  const bodyStr = body === undefined || body === null ? '' : String(body);
   const tagList = Array.isArray(tags) ? tags : [];
   const normalizedTags = tagList
     .map((t: { id?: string; label?: string }) => ({
@@ -227,13 +312,26 @@ dailyRouter.post('/entries', async (req, res) => {
     }))
     .filter((t) => t.label.length > 0);
 
+  // 报备：tags 必选（≥1），body 允许为空（图片会随后走独立上传接口补齐）
+  if (kind === 'report' && normalizedTags.length === 0) {
+    res.status(400).json({ error: '报备至少需要一个标签' });
+    return;
+  }
+  // 日常：保持历史行为，body 必填
+  if (kind === 'daily' && bodyStr.trim().length === 0) {
+    res.status(400).json({ error: '缺少 body' });
+    return;
+  }
+
   const doc = await DailyEntryModel.create({
     at: atDate,
-    body: String(body).slice(0, 20000),
+    body: bodyStr.slice(0, 20000),
     tags: normalizedTags,
     images: [],
     createdByUsername: user.username,
     updatedByUsername: user.username,
+    kind,
+    acks: [],
   });
   broadcastDailyEvent({
     type: 'entry.created',
@@ -282,6 +380,10 @@ dailyRouter.patch('/entries/:id', async (req, res) => {
         label: String(t?.label ?? '').slice(0, 80),
       }))
       .filter((t) => t.label.length > 0);
+    if (doc.kind === 'report' && normalizedTags.length === 0) {
+      res.status(400).json({ error: '报备至少需要一个标签' });
+      return;
+    }
     doc.set('tags', normalizedTags);
   }
   // images：仅允许"对当前 entry 现有图片的重排"，不允许通过此接口新增/删除图片文件
@@ -309,6 +411,16 @@ dailyRouter.patch('/entries/:id', async (req, res) => {
     }
     doc.set('images', images);
   }
+
+  // 报备：整体状态校验——不允许出现"既没正文也没图片"的空壳条目
+  if (doc.kind === 'report') {
+    const finalImages = (doc.get('images') as string[] | undefined) ?? [];
+    if (doc.body.trim().length === 0 && finalImages.length === 0) {
+      res.status(400).json({ error: '报备的文案和图片至少保留一项' });
+      return;
+    }
+  }
+
   doc.updatedByUsername = user.username;
   await doc.save();
   broadcastDailyEvent({
@@ -340,8 +452,9 @@ dailyRouter.delete('/entries/:id', async (req, res) => {
   for (const url of images) {
     tryDeleteDailyImageFile(url);
   }
-  // 删除关联评论
+  // 删除关联评论 + 报备评价
   await DailyCommentModel.deleteMany({ entryId: String(doc._id) });
+  await ReportReviewModel.deleteMany({ entryId: String(doc._id) });
   const removedId = String(doc._id);
   await doc.deleteOne();
   broadcastDailyEvent({
@@ -365,7 +478,7 @@ dailyRouter.post(
             : '';
         let msg = err instanceof Error ? err.message : '上传失败';
         if (code === 'LIMIT_FILE_SIZE') {
-          msg = '文件过大（最大 5MB）';
+          msg = '图片过大，请换一张更小的图片';
         }
         res.status(400).json({ error: msg });
         return;
@@ -563,6 +676,120 @@ dailyRouter.delete('/entries/:id/comments/:commentId', async (req, res) => {
     type: 'comment.deleted',
     entryId: removedEntryId,
     commentId: removedCommentId,
+    by: user.username,
+  });
+  res.status(204).send();
+});
+
+// ─── Report: ack & review ─────────────────────────────────────────────────────
+
+/**
+ * 点击「已阅」：仅报备；仅创建者的"对方"可点击；一人一次性追加，不可撤销。
+ * 幂等：同一用户多次点击只保留第一次的时间。
+ */
+dailyRouter.post('/entries/:id/ack', async (req, res) => {
+  const user = await User.findById(req.session.userId);
+  if (!user) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
+  const doc = await DailyEntryModel.findById(req.params.id);
+  if (!doc) {
+    res.status(404).json({ error: '报备不存在' });
+    return;
+  }
+  const kind = normalizeKind(doc.get('kind'));
+  if (kind !== 'report') {
+    res.status(400).json({ error: '只有报备支持已阅' });
+    return;
+  }
+  const owner = entryOwnerUsername(doc);
+  if (!owner || owner === user.username) {
+    res.status(403).json({ error: '不能对自己的报备点击已阅' });
+    return;
+  }
+  const existing: { username: string; at: Date }[] =
+    (doc.get('acks') as { username: string; at: Date }[] | undefined) ?? [];
+  if (existing.some((a) => a.username === user.username)) {
+    res.json({ entry: serializeLean(doc.toObject() as LeanDaily) });
+    return;
+  }
+  existing.push({ username: user.username, at: new Date() });
+  doc.set('acks', existing);
+  await doc.save();
+  broadcastDailyEvent({
+    type: 'entry.acked',
+    entryId: String(doc._id),
+    by: user.username,
+  });
+  res.json({ entry: serializeLean(doc.toObject() as LeanDaily) });
+});
+
+/**
+ * 写入/覆盖评价（upsert）：仅报备；仅"对方"可写；每人一条。
+ */
+dailyRouter.put('/entries/:id/review', async (req, res) => {
+  const user = await User.findById(req.session.userId);
+  if (!user) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
+  const doc = await DailyEntryModel.findById(req.params.id).lean<LeanDaily | null>();
+  if (!doc) {
+    res.status(404).json({ error: '报备不存在' });
+    return;
+  }
+  if (normalizeKind(doc.kind) !== 'report') {
+    res.status(400).json({ error: '只有报备支持评价' });
+    return;
+  }
+  const owner = entryOwnerUsername(doc);
+  if (!owner || owner === user.username) {
+    res.status(403).json({ error: '不能评价自己的报备' });
+    return;
+  }
+  const body = String(req.body?.body ?? '').trim().slice(0, 1000);
+  if (!body) {
+    res.status(400).json({ error: '评价内容不能为空' });
+    return;
+  }
+  const updated = await ReportReviewModel.findOneAndUpdate(
+    { entryId: req.params.id, username: user.username },
+    { $set: { body } },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  ).lean<LeanReview | null>();
+  if (!updated) {
+    res.status(500).json({ error: '保存失败' });
+    return;
+  }
+  broadcastDailyEvent({
+    type: 'review.upserted',
+    entryId: req.params.id,
+    by: user.username,
+  });
+  res.json({ review: serializeReview(updated) });
+});
+
+/**
+ * 撤回评价（可选）：仅评价作者可删。
+ */
+dailyRouter.delete('/entries/:id/review', async (req, res) => {
+  const user = await User.findById(req.session.userId);
+  if (!user) {
+    res.status(401).json({ error: '未登录' });
+    return;
+  }
+  const removed = await ReportReviewModel.findOneAndDelete({
+    entryId: req.params.id,
+    username: user.username,
+  });
+  if (!removed) {
+    res.status(404).json({ error: '尚未评价' });
+    return;
+  }
+  broadcastDailyEvent({
+    type: 'review.deleted',
+    entryId: req.params.id,
     by: user.username,
   });
   res.status(204).send();

@@ -103,7 +103,7 @@ export default function LoginPage() {
         {/* ── Form ────────────────────────────────────── */}
         <Motion.form
           onSubmit={handleSubmit}
-          className="mt-7 flex flex-col gap-4 sm:mt-8 sm:gap-5"
+          className="romance-note-sheet mt-7 flex flex-col gap-4 sm:mt-8 sm:gap-5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: easeOut, delay: 0.05 }}

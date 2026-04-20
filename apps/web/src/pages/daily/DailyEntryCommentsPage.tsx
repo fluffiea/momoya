@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import type { DailyComment, DailyEntry, HomePartnersResponse } from '@momoya/shared';
+import type { DailyComment, DailyEntry } from '@momoya/shared';
 import { useAuth } from '@/auth/useAuth';
+import { UserAvatar, usePartnerAvatars } from '@/components/user';
 import SecondaryPageHeader from '@/components/ui/SecondaryPageHeader';
 import SectionLabel from '@/components/ui/SectionLabel';
 import DangerConfirmModal from '@/components/ui/DangerConfirmModal';
@@ -39,40 +40,6 @@ function formatEntryWhen(iso: string) {
     hour12: false,
   });
   return `${datePart}  ${timePart}`;
-}
-
-// ─── Avatar component ──────────────────────────────────────────────────────────
-
-function AvatarImg({
-  username,
-  avatarUrl,
-  size = 'md',
-}: {
-  username: string;
-  avatarUrl?: string;
-  size?: 'sm' | 'md';
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const char = username.charAt(0).toUpperCase();
-  const dim = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-8 w-8 text-sm';
-
-  if (avatarUrl && !imgFailed) {
-    return (
-      <img
-        src={resolveApiUrl(avatarUrl)}
-        alt={username}
-        className={`${dim} shrink-0 rounded-full border border-border-sweet/20 object-cover`}
-        onError={() => setImgFailed(true)}
-      />
-    );
-  }
-  return (
-    <div
-      className={`${dim} flex shrink-0 items-center justify-center rounded-full bg-love/20 font-bold text-[#e891b0]`}
-    >
-      {char}
-    </div>
-  );
 }
 
 // ─── Entry image grid + preview ────────────────────────────────────────────────
@@ -297,7 +264,7 @@ function CommentCompose({ entryId, replyTo, onCancelReply, onSent, myAvatarUrl, 
         <p className="px-4 pt-1.5 text-[11px] text-rose-500">{error}</p>
       ) : null}
       <div className="flex items-center gap-2 px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom,0px))]">
-        <AvatarImg username={myUsername} avatarUrl={myAvatarUrl} size="sm" />
+        <UserAvatar username={myUsername} avatarUrl={myAvatarUrl} size="sm" />
         <div className="relative flex-1">
           <textarea
             ref={textareaRef}
@@ -327,7 +294,7 @@ function CommentCompose({ entryId, replyTo, onCancelReply, onSent, myAvatarUrl, 
           disabled={sending || !body.trim()}
           onClick={() => void handleSend()}
           aria-label="发送"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e891b0] text-white shadow-sm transition hover:bg-[#d4769a] disabled:opacity-40"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#eda6c0] via-[#e891b0] to-[#d4769a] text-white shadow-[0_4px_10px_-3px_rgba(232,145,176,0.55),inset_0_1px_0_rgba(255,255,255,0.45)] transition hover:brightness-105 disabled:opacity-40"
         >
           {sending ? (
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -349,6 +316,7 @@ export default function DailyEntryCommentsPage() {
   const { user } = useAuth();
   const me = user?.username;
   const myAvatarUrl = user?.profile.avatarUrl || undefined;
+  const getAvatar = usePartnerAvatars(me, myAvatarUrl);
 
   const [entry, setEntry] = useState<DailyEntry | null>(null);
   const [entryError, setEntryError] = useState('');
@@ -377,21 +345,6 @@ export default function DailyEntryCommentsPage() {
   const [previewIdx, setPreviewIdx] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Avatar map: username → avatarUrl
-  const [avatarMap, setAvatarMap] = useState<Map<string, string>>(new Map());
-
-  const loadPartners = useCallback(async () => {
-    const r = await apiFetch<HomePartnersResponse>('/api/home/partners');
-    if (r.ok) {
-      const map = new Map(
-        r.data.partners
-          .filter((p) => p.avatarUrl)
-          .map((p) => [p.username, p.avatarUrl]),
-      );
-      setAvatarMap(map);
-    }
-  }, []);
-
   const loadEntry = useCallback(async () => {
     if (!entryId) return;
     const r = await apiFetch<{ entry: DailyEntry }>(`/api/daily/entries/${entryId}`);
@@ -416,8 +369,7 @@ export default function DailyEntryCommentsPage() {
   useEffect(() => {
     void loadEntry();
     void loadComments();
-    void loadPartners();
-  }, [loadEntry, loadComments, loadPartners]);
+  }, [loadEntry, loadComments]);
 
   // 实时同步：本条目相关变更时静默刷新
   useEffect(() => {
@@ -435,9 +387,6 @@ export default function DailyEntryCommentsPage() {
       }
     });
   }, [entryId, loadEntry, loadComments]);
-
-  const getAvatar = (username: string) =>
-    username === me ? myAvatarUrl : (avatarMap.get(username) || undefined);
 
   const handleSent = (comment: DailyComment) => {
     setComments((prev) => [...prev, comment]);
@@ -508,7 +457,9 @@ export default function DailyEntryCommentsPage() {
           {entryError ? (
             <p className="mb-4 text-sm text-rose-500">{entryError}</p>
           ) : entry ? (
-            <article className="relative mb-5">
+            <article
+              className={`relative mb-6 ${entry.kind === 'report' ? 'report-note-sheet' : 'romance-note-sheet'}`}
+            >
               {/* 时间章 + 作者：作为帖子的「邮戳」头部 */}
               <header className="flex items-center gap-2.5">
                 <time className="font-display text-[13px] font-semibold tabular-nums text-brown-title/75 sm:text-[14px]">
@@ -583,7 +534,7 @@ export default function DailyEntryCommentsPage() {
                   <li key={comment.id} className="py-4 first:pt-0 last:pb-0">
                     {/* Top-level comment */}
                     <div className="flex items-start gap-3">
-                      <AvatarImg username={comment.username} avatarUrl={getAvatar(comment.username)} />
+                      <UserAvatar username={comment.username} avatarUrl={getAvatar(comment.username)} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2">
                           <span className="text-[13px] font-semibold text-brown-title/80">
@@ -676,7 +627,7 @@ export default function DailyEntryCommentsPage() {
                           const isEditingReply = editing?.commentId === reply.id;
                           return (
                             <li key={reply.id} className="flex items-start gap-2">
-                              <AvatarImg
+                              <UserAvatar
                                 username={reply.username}
                                 avatarUrl={getAvatar(reply.username)}
                                 size="sm"

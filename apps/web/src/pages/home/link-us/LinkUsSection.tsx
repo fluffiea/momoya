@@ -2,48 +2,41 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion as Motion } from 'framer-motion';
 import type { HomePartnersResponse } from '@momoya/shared';
-import yayaAvatar from './assets/yaya.jpg';
-import momoAvatar from './assets/momo.jpg';
 import PartnersStrip, { type PartnersTriple } from './PartnersStrip';
 import CountdownPanel from './CountdownPanel';
 import AnniversaryStory from './AnniversaryStory';
 import { useAnniversaryClock } from './hooks/useAnniversaryClock';
 import { resolveApiUrl } from '@/lib/api';
 
+function firstLetter(s: string): string {
+  return (s || '?').trim().charAt(0).toUpperCase() || '?';
+}
+
 function defaultPartnersTriple(): PartnersTriple {
+  // 未拉到接口前的占位：头像留空 → 走首字母回退，与"无头像用户"表现一致
   return [
-    {
-      name: '江江',
-      avatar: yayaAvatar,
-      defaultAvatar: yayaAvatar,
-      showAvatar: true,
-    },
+    { name: '江江', avatar: '', initial: '江', showAvatar: true },
     { name: 'heart' },
-    {
-      name: '萌萌',
-      avatar: momoAvatar,
-      defaultAvatar: momoAvatar,
-      showAvatar: true,
-    },
+    { name: '萌萌', avatar: '', initial: '萌', showAvatar: true },
   ];
 }
 
 function partnersFromResponse(data: HomePartnersResponse): PartnersTriple {
   const [j, m] = data.partners;
-  const leftAvatar = j.avatarUrl.trim() ? resolveApiUrl(j.avatarUrl) : yayaAvatar;
-  const rightAvatar = m.avatarUrl.trim() ? resolveApiUrl(m.avatarUrl) : momoAvatar;
+  const leftAvatar = j.avatarUrl.trim() ? resolveApiUrl(j.avatarUrl) : '';
+  const rightAvatar = m.avatarUrl.trim() ? resolveApiUrl(m.avatarUrl) : '';
   return [
     {
       name: j.displayName,
       avatar: leftAvatar,
-      defaultAvatar: yayaAvatar,
+      initial: firstLetter(j.displayName || j.username),
       showAvatar: true,
     },
     { name: 'heart' },
     {
       name: m.displayName,
       avatar: rightAvatar,
-      defaultAvatar: momoAvatar,
+      initial: firstLetter(m.displayName || m.username),
       showAvatar: true,
     },
   ];
@@ -93,12 +86,12 @@ export default function LinkUsSection() {
       </h2>
       <div className="mx-auto w-[92%] max-w-md">
         <Motion.div
-          className="link-us-stage px-4 py-4 sm:px-6 sm:py-5"
+          className="link-us-stage relative px-4 py-4 sm:px-6 sm:py-5"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] as const }}
         >
-          <p className="mb-2.5 text-center font-display text-sm font-bold text-brown-title/90 sm:text-base">
+          <p className="mb-2.5 text-center font-display text-sm font-bold tracking-[0.04em] text-brown-title/90 sm:text-base">
             点滴时光，连成我们的故事
           </p>
 
