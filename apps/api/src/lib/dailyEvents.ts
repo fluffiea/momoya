@@ -127,6 +127,15 @@ function presenceAudience(subjectUsernameLower: string): (c: SseClient) => boole
 
 // ─── Presence state management ────────────────────────────────────────────────
 
+/** 异步刷新 lastActiveAt；失败静默丢弃，避免未处理的 rejection 拖垮整进程（生产上即 nginx 502） */
+function touchUserLastActiveAt(userId: string): void {
+  void User.findByIdAndUpdate(userId, { $set: { lastActiveAt: new Date() } })
+    .exec()
+    .catch(() => {
+      // ignore：Mongo 瞬时抖动 / 连接池回收时不应影响 SSE 主循环
+    });
+}
+
 function getConnectionCount(userId: string): number {
   return connectionCountByUserId.get(userId) ?? 0;
 }
@@ -147,7 +156,7 @@ function cancelPendingAway(userId: string): void {
 /** 0→1：立即广播上线 + 刷新 DB 活跃时间 */
 function onFirstConnectionUp(userId: string, usernameLower: string): void {
   cancelPendingAway(userId);
-  void User.findByIdAndUpdate(userId, { $set: { lastActiveAt: new Date() } }).exec();
+  touchUserLastActiveAt(userId);
   broadcast(
     presenceChunk({ kind: 'active', username: usernameLower, at: new Date().toISOString() }),
     presenceAudience(usernameLower),
@@ -365,7 +374,7 @@ export function subscribeDailyEvents(req: Request, res: Response, username: stri
     try {
       res.write(`: ka\n\n`);
       // keepalive 兼任刷新 DB 活跃时间，便于 REST 兜底对 partner 判断"最近还活着"
-      void User.findByIdAndUpdate(uid, { $set: { lastActiveAt: new Date() } }).exec();
+      touchUserLastActiveAt(uid);
     } catch {
       cleanup();
     }

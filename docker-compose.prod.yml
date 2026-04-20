@@ -39,6 +39,19 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    # 避免 web/nginx 先于 API listen：首批请求打到「连接被拒」→ 浏览器侧表现为 502
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -58,7 +71,8 @@ services:
       dockerfile: Dockerfile.web
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       # 80：HTTP→HTTPS 跳转（国内未备案域名 80 可能被运营商拦截，但保留以兼容海外/备案后场景）
       - '80:80'

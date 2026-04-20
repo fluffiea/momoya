@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @momoya/shared run build",
     "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm --filter @momoya/shared run build",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/index.js",
     "seed": "tsx scripts/seed.ts",

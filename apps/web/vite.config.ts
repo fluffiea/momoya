@@ -7,11 +7,17 @@ import tailwindcss from '@tailwindcss/vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      // dev：直连 TS 源码，避免每次改 shared 都要先 pnpm build；生产 build 走 package exports → dist/*.js
+      ...(command === 'serve'
+        ? {
+            '@momoya/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+          }
+        : {}),
     },
   },
   base: '/',
@@ -37,4 +43,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

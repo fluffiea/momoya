@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "prepare": "husky",
-    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter @momoya/web dev\" \"pnpm --filter @momoya/api dev\"",
+    "dev": "pnpm --filter @momoya/shared run build && concurrently -n web,api -c blue,green \"pnpm --filter @momoya/web dev\" \"pnpm --filter @momoya/api dev\"",
     "dev:web": "pnpm --filter @momoya/web dev",
     "dev:api": "pnpm --filter @momoya/api dev",
     "build": "pnpm -r run build",
