@@ -1,6 +1,5 @@
-# 建议部署目录：/opt/momoya/api/（与 compose 同目录的 ./docker 等相对路径会相对于该目录）
-# 对外由本机 Nginx 反代到 server（例如 server_name api.momoya.store → proxy_pass 本机映射端口），
-# server 只绑定 127.0.0.1 供 Nginx 访问，并配合 STATIC_BASE_URL 生成可公网访问的静态资源地址。
+# 生产编排：先准备仓库根 .env.docker，再由同机 Nginx 反代 127.0.0.1:SERVER_PORT。
+# build context 与 mongo-init 都依赖仓库根目录结构。
 name: momoya-prod
 
 services:
@@ -55,7 +54,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env.docker}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-14d}
       UPLOAD_DIR: /app/uploads
-      # 公网可访问的静态资源前缀，须与 Nginx 中该服务的对外域名/协议一致（可在此用环境变量覆盖）
+      # 须与 Nginx 对外 HTTPS 地址一致。
       STATIC_BASE_URL: ${STATIC_BASE_URL:-https://api.momoya.store/static}
       UPLOAD_MAX_SIZE_BYTES: ${UPLOAD_MAX_SIZE_BYTES:-5242880}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
@@ -63,7 +62,7 @@ services:
     volumes:
       - server-uploads:/app/uploads
     ports:
-      # 仅本机回环，与同一主机上的 Nginx (proxy_pass) 配合；不要改成 0.0.0.0 直接对公网暴露
+      # 仅绑宿主机回环口，公网入口交给 Nginx。
       - "127.0.0.1:${SERVER_PORT:-3000}:3000"
     depends_on:
       mongo:

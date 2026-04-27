@@ -1,3 +1,4 @@
+# 本地开发依赖：Mongo、Redis、mongo-express。
 name: momoya-dev
 
 services:

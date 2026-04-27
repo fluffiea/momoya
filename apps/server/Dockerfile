@@ -17,15 +17,17 @@ FROM base AS deps
 RUN apk add --no-cache python3 make g++ libc6-compat
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/server/package.json ./apps/server/
-COPY apps/mobile/package.json ./apps/mobile/
+COPY packages/shared ./packages/shared
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @momoya/server...
 
 FROM deps AS builder
+COPY packages/shared ./packages/shared
 COPY apps/server ./apps/server
+RUN pnpm --filter @momoya/shared build
 RUN pnpm --filter @momoya/server build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm --filter @momoya/server deploy --prod /deploy
+    pnpm --filter @momoya/server deploy --prod --legacy /deploy
 
 FROM node:${NODE_VERSION} AS runtime
 ENV NODE_ENV=production \

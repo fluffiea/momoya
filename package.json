@@ -18,6 +18,7 @@
     "docker:prod:up": "docker compose --env-file .env.docker -f docker-compose.prod.yml up -d",
     "docker:prod:down": "docker compose --env-file .env.docker -f docker-compose.prod.yml down",
     "docker:prod:logs": "docker compose --env-file .env.docker -f docker-compose.prod.yml logs -f",
+    "docker:prod:deploy": "docker compose --env-file .env.docker -f docker-compose.prod.yml up -d --no-deps server",
     "docker:prod:restart": "docker compose --env-file .env.docker -f docker-compose.prod.yml restart server"
   },
   "keywords": [],
