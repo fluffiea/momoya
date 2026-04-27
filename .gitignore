@@ -4,6 +4,7 @@ node_modules/
 # 构建产物
 dist/
 build/
+artifacts/
 *.tsbuildinfo
 
 # 用户上传与运行时写盘（各 app 下名为 uploads 的目录均匹配）

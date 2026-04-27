@@ -15,6 +15,7 @@
     "docker:dev:logs": "docker compose logs -f",
     "docker:dev:reset": "docker compose down -v",
     "docker:prod:build": "docker compose --env-file .env.docker -f docker-compose.prod.yml build",
+    "docker:prod:pack": "node scripts/pack-server-image.mjs",
     "docker:prod:up": "docker compose --env-file .env.docker -f docker-compose.prod.yml up -d",
     "docker:prod:down": "docker compose --env-file .env.docker -f docker-compose.prod.yml down",
     "docker:prod:logs": "docker compose --env-file .env.docker -f docker-compose.prod.yml logs -f",
