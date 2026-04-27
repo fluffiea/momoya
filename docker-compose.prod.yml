@@ -1,4 +1,4 @@
-# 生产编排：先准备仓库根 .env.docker，再由同机 Nginx 反代 127.0.0.1:SERVER_PORT。
+# 生产编排：先准备仓库根 .env.docker；Nginx 通过外部 momoya-bridge 网络访问 server。
 # build context 与 mongo-init 都依赖仓库根目录结构。
 name: momoya-prod
 
@@ -17,7 +17,7 @@ services:
       - mongo-prod-data:/data/db
       - ./docker/mongo-init:/docker-entrypoint-initdb.d:ro
     networks:
-      - momoya
+      - backend
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
@@ -30,7 +30,7 @@ services:
     container_name: momoya-redis
     restart: unless-stopped
     networks:
-      - momoya
+      - backend
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -62,7 +62,7 @@ services:
     volumes:
       - server-uploads:/app/uploads
     ports:
-      # 仅绑宿主机回环口，公网入口交给 Nginx。
+      # 本机回环兜底；公网入口走同一 Docker 网络里的 Nginx。
       - "127.0.0.1:${SERVER_PORT:-3000}:3000"
     depends_on:
       mongo:
@@ -70,7 +70,10 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - momoya
+      backend:
+      proxy:
+        aliases:
+          - momoya-server
 
 volumes:
   mongo-prod-data:
@@ -79,5 +82,8 @@ volumes:
     driver: local
 
 networks:
-  momoya:
+  backend:
     driver: bridge
+  proxy:
+    external: true
+    name: momoya-bridge

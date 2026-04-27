@@ -81,79 +81,68 @@ pnpm --filter @momoya/mobile build:weapp
 
 ## 生产部署（Docker）
 
-推荐方式：**本机构建镜像，服务器只加载并运行镜像**。这样服务器不需要 Node/pnpm，也不会生成 `node_modules`。
+推荐方式：**服务器拉代码后直接用 Docker Compose 构建并运行**。服务器不需要安装 Node/pnpm。部署目录示例：`/opt/momoya/api`。
 
-部署目录示例：`/opt/momoya/api`。该目录里需要有：
+### 1. 首次部署
 
-- `docker-compose.prod.yml`
-- `.env.docker`
-- `docker/mongo-init/`（首次创建 Mongo 数据卷时用）
-
-### 1. 服务器只准备一次
+在服务器上拉仓库到指定目录：
 
 ```bash
-mkdir -p /opt/momoya/api
+mkdir -p /opt/momoya
+git clone <你的仓库地址> /opt/momoya/api
 cd /opt/momoya/api
+```
 
-# 从本项目复制 docker-compose.prod.yml、docker/mongo-init/ 到这里
+准备生产环境变量：
+
+```bash
 cp .env.docker.example .env.docker
 ```
 
-然后编辑 `.env.docker`，填好 Mongo 用户、JWT 密钥、`STATIC_BASE_URL`、`SERVER_PORT` 等。`.env.docker` 是服务器私有文件，不提交。
+然后编辑 `.env.docker`，填好 Mongo 用户、JWT 密钥、`STATIC_BASE_URL`、`SERVER_PORT`、`MOMOYA_SERVER_TAG` 等。`.env.docker` 是服务器私有文件，不提交。
 
-### 2. 本机每次发布先打包
-
-在本机仓库根目录执行：
+构建并启动整套生产服务：
 
 ```bash
-pnpm docker:prod:pack
-```
-
-它会自动生成 `年.月.日.时.分.秒` 格式的 tag，例如 `2026.04.27.22.00.00`，并产出：
-
-```bash
-artifacts/momoya-server-2026.04.27.22.00.00.tar
-```
-
-如果本机和服务器 CPU 架构不同，例如本机 arm64、服务器 amd64，用：
-
-```bash
-pnpm docker:prod:pack -- --platform linux/amd64
-```
-
-### 3. 上传 tar 到服务器
-
-```bash
-scp artifacts/momoya-server-2026.04.27.22.00.00.tar user@server:/opt/momoya/api/
-```
-
-### 4. 服务器加载并启动
-
-```bash
-cd /opt/momoya/api
-docker load -i momoya-server-2026.04.27.22.00.00.tar
-
-# 把 .env.docker 里的 MOMOYA_SERVER_TAG 改成本次 tag
-sed -i 's/^MOMOYA_SERVER_TAG=.*/MOMOYA_SERVER_TAG=2026.04.27.22.00.00/' .env.docker
-
-# 首次部署：会启动 mongo、redis、server
+docker compose --env-file .env.docker -f docker-compose.prod.yml build
 docker compose --env-file .env.docker -f docker-compose.prod.yml up -d
 docker compose --env-file .env.docker -f docker-compose.prod.yml logs -f server
 ```
 
-以后更新 server，只换镜像和 server 容器，不重启 Mongo/Redis：
+### 2. 后续发布
+
+本机提交并推送代码：
+
+```bash
+git add .
+git commit -m "你的提交信息"
+git push
+```
+
+服务器拉最新代码，重打镜像，只替换 `server` 容器：
 
 ```bash
 cd /opt/momoya/api
-docker load -i momoya-server-2026.04.27.22.30.00.tar
-sed -i 's/^MOMOYA_SERVER_TAG=.*/MOMOYA_SERVER_TAG=2026.04.27.22.30.00/' .env.docker
+git pull
+docker compose --env-file .env.docker -f docker-compose.prod.yml build
 docker compose --env-file .env.docker -f docker-compose.prod.yml up -d --no-deps server
 docker compose --env-file .env.docker -f docker-compose.prod.yml logs -f server
 ```
 
-`server` 在容器内监听 3000，映到宿主机 `127.0.0.1:SERVER_PORT→3000`（`SERVER_PORT` 在 `.env.docker`），仅经本机 Nginx 对公网；Nginx 需代理 API、`/static` 与 WebSocket（Socket.IO）。数据卷：Mongo `mongo-prod-data`；上传 `server-uploads`（容器内 `/app/uploads`）。首次空卷建库见 `docker/mongo-init/`。
+`up -d --no-deps server` 只替换 `server` 容器，不会重启 Mongo/Redis，也不会动数据卷。单容器服务仍会有短暂切换时间；若要近似零停机，需要双实例/蓝绿发布并让 Nginx 切流量。
 
-下线整栈时：
+### 3. 运行方式说明
+
+`server` 在容器内监听 3000，映到宿主机 `127.0.0.1:SERVER_PORT→3000`（`SERVER_PORT` 在 `.env.docker`），仅经本机 Nginx 对公网；Nginx 需代理 API、`/static` 与 WebSocket（Socket.IO）。
+
+数据卷：
+
+- Mongo：`mongo-prod-data`
+- 上传图片：`server-uploads`（挂到容器内 `/app/uploads`）
+
+首次空卷建库时会执行 `docker/mongo-init/` 初始化 Mongo 应用账号。
+
+### 4. 下线整栈
 
 ```bash
 cd /opt/momoya/api
