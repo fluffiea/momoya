@@ -1,18 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Momoya 生产部署 compose
-#
-# 用法：
-#   1) 复制 .env.production.example -> .env.production，按需填密钥与镜像前缀（见 DEPLOYMENT.md）
-#   2) ln -s .env.production .env       # 让 docker compose 默认能读到密钥
-#   3) 推荐：docker compose -f docker-compose.prod.yml pull api web && docker compose -f docker-compose.prod.yml up -d
-#      （镜像由 GitHub Actions 推到 GHCR；本机仍保留 build 段，应急可 up -d --build）
-#
-# 服务拓扑：
-#   mongo (内网) ──┐
-#                  ├─ api（内网，仅 web 通过 docker 网络访问 4000）
-#   web (nginx) ───┘   ── 对外映射宿主 80 / 443（HTTP 跳转 + HTTPS）
-#
-# 注意：mongo 与 api 都不映射宿主端口，仅在 compose 内网可达，减少攻击面。
+# Momoya 生产部署 compose (已适配 Gateway 网关架构)
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -31,6 +18,8 @@ services:
       start_period: 15s
 
   api:
+    # 这里的服务名（api）供 web 容器内部通过 http://api:4000 访问
+    container_name: momoya-web-api 
     image: ${MOMOYA_IMAGE_PREFIX:?MOMOYA_IMAGE_PREFIX 必填}/momoya-api:${MOMOYA_IMAGE_TAG:-latest}
     build:
       context: .
@@ -39,7 +28,6 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-    # 避免 web/nginx 先于 API listen：首批请求打到「连接被拒」→ 浏览器侧表现为 502
     healthcheck:
       test:
         [
@@ -58,13 +46,13 @@ services:
       MONGODB_URI: mongodb://mongo:27017/momoya
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET 必填}
       PROFILE_SECRET_KEY: ${PROFILE_SECRET_KEY:?PROFILE_SECRET_KEY 必填}
-      # 显式指定上传目录，避免代码内相对路径推导出错
       UPLOADS_DIR: /app/uploads
     volumes:
-      # 用户上传文件持久化（Dockerfile 里 chown 给 nodejs:1001）
       - momoya_uploads:/app/uploads
+    # 保持在默认网络，仅供内部 web 访问
 
   web:
+    container_name: momoya-web # 必须匹配 gateway 里的配置
     image: ${MOMOYA_IMAGE_PREFIX:?MOMOYA_IMAGE_PREFIX 必填}/momoya-web:${MOMOYA_IMAGE_TAG:-latest}
     build:
       context: .
@@ -73,16 +61,21 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    ports:
-      # 80：HTTP→HTTPS 跳转（国内未备案域名 80 可能被运营商拦截，但保留以兼容海外/备案后场景）
-      - '80:80'
-      # 443：正式 HTTPS 入口
-      - '443:443'
-    volumes:
-      # 把宿主机 deploy/certs/ 下的证书以只读方式挂进容器
-      # 约定文件名：cert.crt（含证书链，腾讯云的 Nginx 格式 _bundle.crt）和 cert.key
-      - ./deploy/certs:/etc/nginx/certs:ro
+    # 1. 移除了 80/443 端口，交给网关
+    # 2. 移除了证书映射，交给网关
+    networks:
+      - default         # 连接内部的 momoya-web-api
+      - momoya-bridge   # 连接外部的 momoya-gateway
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   momoya_mongo_data:
   momoya_uploads:
+
+networks:
+  momoya-bridge:
+    external: true
