@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+coverage
+.nyc_output
+test
+*.log
+.env
+.env.*
+!.env.example
+.git
+.vscode
+.idea
+*.md
+.DS_Store
+uploads

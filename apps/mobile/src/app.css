@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* 小程序页根高度：便于 tabBar 页用 h-full + flex + ScrollView 获得稳定可视高度，避免滚动手势异常 */
+page {
+  height: 100%;
+}
+
+/* H5：让页面根节点 h-full 能传到 #app，与 weapp 的 page { height:100% } 对齐 */
+html,
+body,
+#app {
+  height: 100%;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-8px) rotate(3deg); }
+  66% { transform: translateY(-4px) rotate(-2deg); }
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(5deg); }
+}
+
+.float-anim {
+  animation: float 3s ease-in-out infinite;
+}
+
+.float-anim-slow {
+  animation: floatSlow 5s ease-in-out infinite;
+}
+
+/*
+ * 登录页 Input 的 placeholder-class
+ * 所有长度按 750 设计稿标注（非视觉物理像素），由 postcss-pxtransform 两端各自换算：
+ *   - weapp: 32px → 32rpx（@375 屏 = 视觉 16px）
+ *   - h5:    32px → 1rem（配合 index.html 脚本 rootFontSize=16px @375 屏 → 视觉 16px）
+ */
+.login-input-placeholder {
+  color: #D6A2AD;
+  font-size: 32px;
+  line-height: 96px;
+  font-weight: 400;
+  font-synthesis: none;
+}
+
+/**
+ * 登录页 Picker 展示行与 .login-password-input 同左右 32px（设计稿）内边距，避免与 Tailwind pl-* 混用对不齐。
+ */
+.login-field-row {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+/**
+ * 登录页密码：与 .login-input-placeholder 同款字号/行高/字重，经 postcss-pxtransform 与行内分离；
+ * 减轻真机安全输入时密文圆点、占位与「非聚焦」状态不一致的观感。
+ * 仅负责左右内边距；与 .login-field-row 的 32px 横向对齐一致。
+ */
+.login-password-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  padding-left: 32px;
+  padding-right: 32px;
+  color: #4A6670;
+  font-size: 32px;
+  line-height: 96px;
+  font-weight: 400;
+  font-synthesis: none;
+}
+
+/* 通用表单输入框 placeholder */
+.page-input-placeholder {
+  color: #C3B59F;
+  font-size: 32px;
+  line-height: 96px;
+  font-weight: 400;
+}
+
+/* Textarea placeholder */
+.textarea-placeholder {
+  color: #C3B59F;
+  font-size: 32px;
+  font-weight: 400;
+}

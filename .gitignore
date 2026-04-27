@@ -1,40 +1,5 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
 node_modules
 dist
-dist-ssr
-*.local
-.env
-.env.production
-!.env.production.example
 
-# SSL 证书（**永远**不要提交私钥到 git）
-deploy/certs/*
-!deploy/certs/.gitkeep
-!deploy/certs/README.md
-
-# 本地上传头像（保留目录结构）
-apps/api/uploads/avatars/*
-!apps/api/uploads/avatars/.gitkeep
-
-# 日常图片上传（保留目录结构）
-apps/api/uploads/daily-images/*
-!apps/api/uploads/daily-images/.gitkeep
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Cursor Debug ingest 生成的 NDJSON 日志
+.cursor/debug*.log

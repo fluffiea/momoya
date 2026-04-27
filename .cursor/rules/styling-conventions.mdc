@@ -1,0 +1,167 @@
+---
+description: Styling conventions for the Taro cross-platform app (weapp + H5). Enforce a single unit system (px @ 750 design width) that works on both platforms via postcss-pxtransform. Apply when writing or reviewing styles in apps/mobile (CSS, className, inline style, native attribute strings like placeholderStyle).
+alwaysApply: false
+globs:
+  - "apps/mobile/**/*.css"
+  - "apps/mobile/**/*.scss"
+  - "apps/mobile/**/*.tsx"
+  - "apps/mobile/**/*.ts"
+---
+
+# 样式与单位规范（Taro 小程序 + H5）
+
+本项目需要**一套代码同时在微信小程序和 H5 上显示效果一致**。为此我们约定一套**单一单位体系**，由构建链自动换算到各端。
+
+## 一、黄金法则
+
+**自定义 CSS 里只写 `px`**（按 **750 设计稿**标注值），由 `postcss-pxtransform` 自动转换：
+
+- **weapp** 端：`Npx` → `Nrpx`
+- **H5** 端：`Npx` → `N/32 rem`（配合 [`src/index.html`](apps/mobile/src/index.html) 根字号脚本 + [`config/index.ts`](apps/mobile/config/index.ts) 中 `h5.postcss.pxtransform` 的 `baseFontSize: 16`）
+
+两端视觉大小与设计稿比例在各屏宽下保持一致。
+
+### ⚠️ 关键语义：CSS 里的 `px` 是「设计稿标注值」，不是「视觉 px」
+
+750 设计稿基准下：
+
+| 设计稿标注（CSS 源） | @375 屏视觉 | @414 屏视觉 |
+|---|---|---|
+| `32px` | 16px | ≈17.7px |
+| `96px` | 48px | ≈53px |
+| `1px` | 0.5px | ≈0.55px |
+
+**从设计稿拿到的标注直接写入 CSS，不要手工除 2**。如果你想要「视觉 16px」，在 CSS 里写 `32px`。
+
+## 二、禁止项
+
+- ❌ **禁止在业务代码里写裸 `rpx`**（浏览器不认识，H5 上整条样式声明会失效）
+- ❌ **禁止在全局/共享 CSS 里写 H5 专属单位**（`vw/vh/rem`），除非你清楚小程序端是否支持
+- ❌ **禁止在 Tailwind arbitrary value 里写 rpx**（如 `w-[32rpx]`），改成 `w-[16px]` 或原子类 `w-4`
+- ❌ **禁止用元素选择器做全局样式**（如 `view { ... }`），不同端编译后标签不一致
+
+## 三、优先级：三种样式载体怎么选
+
+按从优到劣排序：
+
+### 1. Tailwind 原子类（首选）
+
+```tsx
+<View className="h-12 rounded-2xl bg-pink-50 px-4 text-base" />
+```
+
+Tailwind 类通过 `weapp-tailwindcss`（weapp 端 rem → rpx）和 H5 自身 rem 机制，两端自动适配。表达尺寸、字号、间距、颜色的**绝大多数场景都应走这条路**。
+
+### 2. CSS 文件里的自定义类（可选）
+
+仅用于 Tailwind 无法精确表达、或需跨多处复用的样式。**一律写 `px`（750 设计稿标注值）**：
+
+```css
+/* ✅ 正确：32px = 设计稿标注，@375 屏视觉 16px */
+.login-input-placeholder {
+  color: #f472b6;
+  font-size: 32px;
+  line-height: 96px;
+}
+
+/* ❌ 错误：H5 不认 rpx */
+.login-input-placeholder {
+  font-size: 32rpx;
+}
+
+/* ❌ 错误：把视觉 px 当 CSS 源值写，实际视觉只有 8px */
+.too-small {
+  font-size: 16px;
+}
+```
+
+### 3. React 内联 style（谨慎使用）
+
+**重要：内联 style 不进 PostCSS 链路**。数字值在两端都是**物理像素**，**不会按设计稿缩放**。其语义与 CSS 里的 px 不同：
+
+| 写法 | 语义 | `16` 在 @375 屏的视觉 | 其他屏宽 |
+|---|---|---|---|
+| CSS `font-size: 16px` | 750 设计稿标注 | 8px（会缩放） | 按比例变 |
+| inline `style={{ fontSize: 16 }}` | 物理 16px | 16px（固定） | 还是 16px |
+
+- **首选**：能改用 className 就改，尺寸不要用内联 style
+- **必须用时**：
+  - 非响应式的小细节（`opacity`、`transform`、固定 1px 分隔线）：直接数字 / 字符串
+  - **需要跨端按设计稿缩放的尺寸**：使用 [`Taro.pxTransform(N)`](https://docs.taro.zone/docs/apis/base/Taro/pxTransform)，参数是**设计稿标注值**
+
+```tsx
+import Taro from '@tarojs/taro'
+
+// ✅ 响应式尺寸：用 Taro.pxTransform（参数是 750 设计稿标注）
+<View style={{ width: Taro.pxTransform(100) }} />  // 视觉 50px @375
+
+// ✅ 一次性微调：直接数字/字符串（两端都是物理 px，不缩放）
+<View style={{ opacity: 0.5, borderBottom: '1px solid #fce7f3' }} />
+
+// ⚠️ 注意：这是物理 16px（固定），不是"设计稿 16"
+<View style={{ fontSize: 16 }} />
+```
+
+## 四、原生组件属性字符串
+
+`placeholderStyle`、`cursorStyle` 等**字符串形式**的样式是**直接交给原生组件**的，不走 PostCSS 和 Taro 运行时：
+
+```tsx
+// ✅ 正确：两端都写 px
+<Input placeholderStyle="color: #f472b6; font-size: 16px;" />
+
+// ❌ 错误：H5 不认 rpx
+<Input placeholderStyle="font-size: 32rpx;" />
+```
+
+建议把这类字符串提取为模块顶层常量，避免在渲染时重复创建字符串触发闪动（参考 [`src/pages/login/index.tsx`](apps/mobile/src/pages/login/index.tsx) 中的 `PLACEHOLDER_STYLE`）。
+
+## 五、特殊情况
+
+### 跳过单位转换
+
+不想被 pxtransform 处理的「物理像素」（如细边框、投影），用**大写 `Px` / `PX`**：
+
+```css
+.thin-border {
+  border: 1Px solid #eee; /* 保留为 1Px，两端都不转 */
+}
+```
+
+### 跳过整个文件
+
+文件头加注释：
+
+```css
+/*postcss-pxtransform disable*/
+.legacy-styles { ... }
+```
+
+### 条件分支
+
+确需按端分别处理的，用 Taro 条件编译：
+
+```tsx
+if (process.env.TARO_ENV === 'weapp') { ... }
+```
+
+**原则**：平台分支集中在**组件或样式内部**，不要在业务页面里散落判断。
+
+## 六、关键配置（项目侧已配置好，只需了解）
+
+| 文件 | 作用 |
+|------|------|
+| [`apps/mobile/config/index.ts`](apps/mobile/config/index.ts) | `designWidth: 750` + 两端 `postcss.pxtransform` |
+| [`apps/mobile/src/index.html`](apps/mobile/src/index.html) | H5 端根字号自适应脚本 |
+| [`apps/mobile/src/app.css`](apps/mobile/src/app.css) | 全局样式入口，`@import "tailwindcss"` |
+
+修改这几个文件前请确认影响面。
+
+## 七、Checklist（提交前自检）
+
+- [ ] 没有在 `.css` / `.scss` / `className` 中写 `rpx`
+- [ ] 自定义 CSS 类里尺寸一律用 `px`（按 750 设计稿）
+- [ ] `placeholderStyle` 等原生字符串用 `px`，不用 `rpx`
+- [ ] 内联 style 里的响应式尺寸用 `Taro.pxTransform(N)`；一次性微调用数字
+- [ ] 优先 Tailwind 类，其次 CSS 文件，最后内联
+- [ ] 新增全局样式不使用元素选择器（`view/image/button` 等）

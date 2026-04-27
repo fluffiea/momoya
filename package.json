@@ -1,38 +1,45 @@
 {
   "name": "momoya",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Momoya Monorepo Project",
   "scripts": {
-    "prepare": "husky",
-    "dev": "pnpm --filter @momoya/shared run build && concurrently -n web,api -c blue,green \"pnpm --filter @momoya/web dev\" \"pnpm --filter @momoya/api dev\"",
-    "dev:web": "pnpm --filter @momoya/web dev",
-    "dev:api": "pnpm --filter @momoya/api dev",
-    "build": "pnpm -r run build",
-    "lint": "pnpm -r run lint",
-    "typecheck": "pnpm -r run typecheck",
-    "preview": "pnpm --filter @momoya/web preview",
-    "commit": "git-cz",
-    "cm": "git add . && pnpm run commit",
-    "seed": "pnpm --filter @momoya/api seed"
+    "build:shared": "pnpm --filter @momoya/shared build",
+    "dev:shared": "pnpm --filter @momoya/shared dev",
+    "dev:weapp": "pnpm --filter @momoya/mobile dev:weapp",
+    "dev:server": "pnpm --filter @momoya/server start:dev",
+    "dev": "pnpm build:shared && concurrently -n \"Shared,Taro,Nest\" -c \"yellow,blue,green\" \"pnpm dev:shared\" \"pnpm dev:weapp\" \"pnpm dev:server\"",
+    "postinstall": "pnpm build:shared",
+    "docker:dev:up": "docker compose up -d",
+    "docker:dev:down": "docker compose down",
+    "docker:dev:logs": "docker compose logs -f",
+    "docker:dev:reset": "docker compose down -v",
+    "docker:prod:build": "docker compose --env-file .env.docker -f docker-compose.prod.yml build",
+    "docker:prod:up": "docker compose --env-file .env.docker -f docker-compose.prod.yml up -d",
+    "docker:prod:down": "docker compose --env-file .env.docker -f docker-compose.prod.yml down",
+    "docker:prod:logs": "docker compose --env-file .env.docker -f docker-compose.prod.yml logs -f",
+    "docker:prod:restart": "docker compose --env-file .env.docker -f docker-compose.prod.yml restart server"
   },
-  "packageManager": "pnpm@10.30.1",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
   "devDependencies": {
-    "@commitlint/cli": "^20.4.2",
-    "@commitlint/config-conventional": "^20.4.2",
-    "commitizen": "^4.3.1",
-    "concurrently": "^9.1.2",
-    "cz-conventional-changelog": "^3.3.0",
-    "husky": "^9.1.7"
-  },
-  "config": {
-    "commitizen": {
-      "path": "./node_modules/cz-conventional-changelog"
-    }
+    "concurrently": "^9.2.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "sharp"
+      "@nestjs/core",
+      "@parcel/watcher",
+      "@swc/core",
+      "@tarojs/binding",
+      "@tarojs/cli",
+      "bcrypt",
+      "core-js",
+      "core-js-pure",
+      "esbuild",
+      "unrs-resolver",
+      "weapp-tailwindcss"
     ]
   }
 }

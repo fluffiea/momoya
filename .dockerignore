@@ -1,30 +1,39 @@
-# 减小构建上下文，加速 docker build
+# 构建上下文是整个 monorepo 根目录（因为 pnpm workspace 依赖需要根 lockfile 和 workspace 清单）。
+# 这里只排除明确不需要进入镜像的内容。
+
+# node_modules 在镜像内重新安装
 **/node_modules
+
+# 构建产物（镜像内会重新产出）
 **/dist
-**/dist-ssr
-**/.turbo
-**/.cache
+**/build
+**/coverage
+**/.nyc_output
 
-# 本地数据/上传，不进镜像（生产用 named volume）
-apps/api/uploads/avatars/*
-apps/api/uploads/daily-images/*
-!apps/api/uploads/avatars/.gitkeep
-!apps/api/uploads/daily-images/.gitkeep
+# 小程序端产物（后端镜像完全用不到）
+apps/mobile/dist
 
-# 环境变量与本地配置
-.env
-.env.*
-!.env.production.example
-
-# 日志/编辑器/系统
-*.log
-.DS_Store
-.idea
-.vscode
-
-# Git 元信息
+# Git / 编辑器 / OS 杂项
 .git
-.github
+.gitignore
+.gitattributes
+.vscode
+.idea
+.DS_Store
 
-# Husky 钩子
-.husky
+# 日志
+**/*.log
+logs/
+
+# 本地环境变量（镜像外部通过 env_file / secret 注入）
+**/.env
+**/.env.*
+!**/.env.example
+
+# 上传目录（运行时卷，构建不需要）
+apps/server/uploads
+uploads
+
+# 文档类（减少构建上下文体积）
+**/*.md
+docs/

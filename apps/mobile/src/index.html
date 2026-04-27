@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width,initial-scale=1,user-scalable=no" name="viewport">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no,address=no">
+  <meta name="apple-mobile-web-app-status-bar-style" content="white">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" >
+  <title>mobile</title>
+  <!--
+    H5 端根字号自适应：必须与 weapp-tailwindcss (1rem = 32rpx) 和
+    config/index.ts 中 h5.postcss.pxtransform (baseFontSize: 16) 对齐。
+    公式: rootFontSize = 32 * viewportWidth / 750
+      - @375 屏 = 16px，与 Tailwind 原生 1rem = 16px 基准一致
+      - 其他屏宽按比例，与 weapp 的 rpx 自动缩放保持视觉同步
+    详见 .cursor/rules/styling-conventions.mdc
+  -->
+  <script>
+    (function (n) {
+      function f() {
+        var e = n.document.documentElement
+        var w = e.getBoundingClientRect().width
+        var x = (32 * w) / 750
+        e.style.fontSize = x + 'px'
+      }
+      n.addEventListener('resize', f)
+      f()
+    })(window)
+  </script>
+  <script><%= htmlWebpackPlugin.options.script %></script>
+</head>
+<body>
+  <div id="app"></div>
+</body>
+</html>

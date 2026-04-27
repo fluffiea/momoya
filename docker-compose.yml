@@ -1,24 +1,49 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# 本地开发用 compose：只起 MongoDB，配合 `pnpm dev` 在宿主机跑 web/api
-# 生产部署请使用 docker-compose.prod.yml
-# ─────────────────────────────────────────────────────────────────────────────
+name: momoya-dev
 
 services:
   mongo:
     image: mongo:7
+    container_name: momoya-mongo-dev
+    restart: unless-stopped
+    command: ["--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-dev-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: momoya-mongo-express-dev
     restart: unless-stopped
     ports:
-      - '27017:27017'
-    volumes:
-      - momoya_mongo_data:/data/db
+      - "8081:8081"
     environment:
-      MONGO_INITDB_DATABASE: momoya
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_PORT: "27017"
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: momoya-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
     healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
-      retries: 8
-      start_period: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
 volumes:
-  momoya_mongo_data:
+  mongo-dev-data:
+    driver: local
