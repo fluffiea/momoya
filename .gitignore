@@ -1,5 +1,64 @@
-node_modules
-dist
+# 依赖
+node_modules/
 
-# Cursor Debug ingest 生成的 NDJSON 日志
+# 构建产物
+dist/
+build/
+*.tsbuildinfo
+
+# 用户上传与运行时写盘（各 app 下名为 uploads 的目录均匹配）
+uploads/
+
+# 环境变量与本地密钥
+# 仍提交：*/*.env.example、根目录 .env.docker.example、Taro 团队共享的 .env.development / .env.test
+.env
+.env.local
+.env.docker
+.env.production
+.env.staging
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+logs/
+
+# 测试与覆盖率
+coverage/
+.nyc_output/
+
+# 操作系统
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+*.suo
+*.njsproj
+*.ntvs*
+*.swp
+*.swo
+*.sublime-workspace
+
+# 工具缓存
+.eslintcache
+.turbo/
+.parcel-cache/
+**/.vite/
+**/.vite-temp/
+.temp/
+.tmp/
+.swc/
+.rn_temp/
+
+# 本机/隐私（微信开发者工具会写；若已跟踪需 git rm --cached 后再提交）
+apps/mobile/project.private.config.json
+apps/mobile/deploy_versions/
+
+# Cursor
 .cursor/debug*.log
