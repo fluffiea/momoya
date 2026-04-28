@@ -94,6 +94,7 @@ bash deploy/server-update.sh --build
 | `docker-compose.yml` | 本地只起 Mongo |
 | `docker-compose.prod.yml` | 生产：mongo + api + web |
 | `Dockerfile.api` / `Dockerfile.web` | 镜像构建 |
+| `deploy/gateway-nginx.conf` | **momoya-gateway** 完整示例（与线上格式一致）；同步到服务器网关目录后 `nginx -t` 再 reload。 |
 | `deploy/nginx.conf` | 打入 `momoya-web`：仅静态 SPA（:80） |
 | `deploy/server-update.sh` | 服务器：`pull` + 更新容器（支持 `--build`） |
 | `.env.production.example` | 生产环境变量模板 |
