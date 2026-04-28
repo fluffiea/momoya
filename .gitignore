@@ -1,40 +1,69 @@
-# Logs
-logs
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+build/
+artifacts/
+*.tsbuildinfo
+
+# 用户上传与运行时写盘（各 app 下名为 uploads 的目录均匹配）
+uploads/
+
+# 密钥、本地与生产 env 文件（`*.env.example` 等模板照常提交）
+.env
+.env.local
+.env.docker
+.env.production
+.env.staging
+.env.*.local
+
+# 日志
 *.log
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
+logs/
 
-node_modules
-dist
-dist-ssr
-*.local
-.env
-.env.production
-!.env.production.example
+# 测试与覆盖率
+coverage/
+.nyc_output/
 
-# SSL 证书（**永远**不要提交私钥到 git）
+# 操作系统
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+*.suo
+*.njsproj
+*.ntvs*
+*.swp
+*.swo
+*.sublime-workspace
+
+# 工具缓存
+.eslintcache
+.turbo/
+.parcel-cache/
+**/.vite/
+**/.vite-temp/
+.temp/
+.tmp/
+.swc/
+.rn_temp/
+
+# 本机/隐私（微信开发者工具会写；若已跟踪需 git rm --cached 后再提交）
+apps/mobile/project.private.config.json
+apps/mobile/deploy_versions/
+
+# Cursor
+.cursor/debug*.log
+
+# SSL 证书（不要提交私钥；占位文件可提交）
 deploy/certs/*
 !deploy/certs/.gitkeep
 !deploy/certs/README.md
-
-# 本地上传头像（保留目录结构）
-apps/api/uploads/avatars/*
-!apps/api/uploads/avatars/.gitkeep
-
-# 日常图片上传（保留目录结构）
-apps/api/uploads/daily-images/*
-!apps/api/uploads/daily-images/.gitkeep
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?

@@ -3,10 +3,9 @@
 # Momoya Web 镜像（Vite 静态产物 + nginx 托管）
 #
 # 关键点：
-# 1. 不传 VITE_API_BASE_URL：前端走相对路径 /api，由 nginx 反代到 api 容器，
-#    这样同源 cookie 自动生效，省去 CORS 配置。
-# 2. SPA 单入口：try_files $uri /index.html
-# 3. assets/* 是带 hash 的文件，长缓存；index.html 不缓存。
+# 1. 不传 VITE_API_BASE_URL：前端走相对路径 /api；由 momoya-gateway 反代到 api 容器（见 README）。
+# 2. 本镜像内 nginx 只托管静态文件（:80）；TLS 在网关终止。
+# 3. SPA：try_files；assets 长缓存；index.html 不缓存。
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG NODE_VERSION=20

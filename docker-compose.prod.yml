@@ -1,6 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Momoya 生产部署 compose (已适配 Gateway 网关架构)
+# Momoya 生产 compose（mongo + api + web）
+#
+# 服务器建议：仓库根放在 /opt/momoya/web，与本机 git push / pull 同步部署。
+# 网关：web 容器名必须为 momoya-web，且加入外部网络 momoya-bridge，供 Nginx 反代。
+# 变量见 .env.production.example → 复制为 .env.production，compose 使用 --env-file。
 # ─────────────────────────────────────────────────────────────────────────────
+
+name: momoya
 
 services:
   mongo:
@@ -18,8 +24,8 @@ services:
       start_period: 15s
 
   api:
-    # 这里的服务名（api）供 web 容器内部通过 http://api:4000 访问
-    container_name: momoya-web-api 
+    # 服务名 api 保留在默认 compose 网络内；容器名供网关反代 momoya.store/api → momoya-web-api:4000
+    container_name: momoya-web-api
     image: ${MOMOYA_IMAGE_PREFIX:?MOMOYA_IMAGE_PREFIX 必填}/momoya-api:${MOMOYA_IMAGE_TAG:-latest}
     build:
       context: .
@@ -49,7 +55,9 @@ services:
       UPLOADS_DIR: /app/uploads
     volumes:
       - momoya_uploads:/app/uploads
-    # 保持在默认网络，仅供内部 web 访问
+    networks:
+      - default
+      - momoya-bridge # 供网关将 https://momoya.store/api/* 反代到 momoya-web-api:4000
 
   web:
     container_name: momoya-web # 必须匹配 gateway 里的配置
